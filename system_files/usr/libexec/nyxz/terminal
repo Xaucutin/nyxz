@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+# Abre o terminal escolhido no Nyxz Setup; sem escolha, usa o de emergência (foot).
+for t in ghostty kitty foot; do
+  if command -v "$t" >/dev/null 2>&1; then exec "$t" "$@"; fi
+done
+echo "Nenhum terminal encontrado" >&2
+exit 1

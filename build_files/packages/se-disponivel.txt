@@ -1,0 +1,28 @@
+# Entram se existirem para esta versão do Fedora; se faltarem, o build só avisa.
+# Na fase 0 isso evita travar por causa de um COPR atrasado.
+
+# Ecossistema Hyprland (COPR)
+xdg-desktop-portal-hyprland
+hyprpolkitagent
+hyprlock
+hypridle
+hyprsunset
+
+# Sessão com cada app no seu próprio escopo do systemd (ARQUITETURA.md, 2.1)
+uwsm
+app2unit
+
+# Shell da Nyxz (barra, busca, notificações)
+quickshell
+
+# Tela de login em texto (fase 0; vira uma tela própria na fase 1)
+tuigreet
+
+# Lançador provisório até a busca da Nyxz ficar pronta
+fuzzel
+
+# Firmware da placa de vídeo AMD
+amd-gpu-firmware
+
+# Ferramentas de diagnóstico leves
+vulkan-tools

@@ -1,0 +1,56 @@
+name: ISO
+
+# Gera a ISO de instalação a partir da imagem publicada.
+# ATENÇÃO (fase 0): ainda não validada. Teste SOMENTE em máquina virtual.
+on:
+  workflow_dispatch:
+
+env:
+  FEDORA_VERSION: "44"
+
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Liberar espaço no runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - name: Nome da imagem
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/nyxz:${FEDORA_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Entrar no GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Baixar a imagem
+        run: sudo podman pull "$IMAGE"
+
+      - name: Gerar a ISO (bootc-image-builder)
+        run: |
+          mkdir -p output
+          sudo podman run --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            -v ./disk_config/iso.toml:/config.toml:ro \
+            -v ./output:/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type anaconda-iso \
+            --rootfs btrfs \
+            --use-librepo=True \
+            "$IMAGE"
+          sudo find output -name '*.iso' -exec ls -lh {} \;
+
+      - name: Guardar a ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: nyxz-${{ env.FEDORA_VERSION }}-iso
+          path: output/bootiso/*.iso
+          retention-days: 7
+          compression-level: 0

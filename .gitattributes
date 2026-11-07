@@ -1,0 +1,6 @@
+# Scripts e configurações do sistema precisam de fim de linha Linux (LF),
+# mesmo editados no Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.iso binary

@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+# Tela de login provisória (fase 0). Usa o tuigreet se existir; senão, o agreety do greetd.
+if command -v tuigreet >/dev/null 2>&1; then
+  exec tuigreet --time --remember --asterisks \
+    --greeting "Nyxz" \
+    --cmd /usr/libexec/nyxz/session
+fi
+exec agreety --cmd /usr/libexec/nyxz/session

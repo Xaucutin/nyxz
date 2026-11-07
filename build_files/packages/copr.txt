@@ -1,0 +1,4 @@
+# COPRs usados na imagem base. Trocar pelo COPR próprio da Nyxz quando ele existir
+# (ver ARQUITETURA.md, seção 1: o Hyprland saiu dos repositórios oficiais do Fedora).
+ashbuk/Hyprland-Fedora
+errornointernet/quickshell

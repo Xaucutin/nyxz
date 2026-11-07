@@ -1,0 +1,19 @@
+# Configuração da ISO (bootc-image-builder).
+# Fase 0: kickstart mínimo. Disco e usuário ficam sem resposta para o instalador
+# perguntar (a confirmar no primeiro teste em VM; ver ARQUITETURA.md, seção 1).
+
+[customizations.installer.kickstart]
+contents = """
+lang pt_BR.UTF-8
+keyboard br
+timezone America/Sao_Paulo
+network --bootproto=dhcp --activate
+graphical
+"""
+
+[customizations.installer.modules]
+enable = [
+  "org.fedoraproject.Anaconda.Modules.Storage",
+  "org.fedoraproject.Anaconda.Modules.Users",
+  "org.fedoraproject.Anaconda.Modules.Localization",
+]

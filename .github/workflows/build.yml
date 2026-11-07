@@ -1,0 +1,65 @@
+name: Imagem
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "design/**"]
+  pull_request:
+    paths-ignore: ["**.md", "design/**"]
+  schedule:
+    - cron: "20 6 * * *"   # todo dia, 03:20 em Brasília: pega as versões novas dos pacotes
+  workflow_dispatch:
+
+env:
+  FEDORA_VERSION: "44"
+  IMAGE_NAME: nyxz
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Liberar espaço no runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - name: Nome da imagem em minúsculas
+        run: echo "IMAGE_REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - name: Versão
+        run: echo "NYXZ_VERSION=$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Construir
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          containerfiles: ./Containerfile
+          image: ${{ env.IMAGE_NAME }}
+          tags: |
+            latest
+            ${{ env.FEDORA_VERSION }}
+            ${{ env.NYXZ_VERSION }}
+          build-args: |
+            FEDORA_VERSION=${{ env.FEDORA_VERSION }}
+            NYXZ_VERSION=${{ env.NYXZ_VERSION }}
+          oci: false
+
+      - name: Publicar no GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}

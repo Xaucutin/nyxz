@@ -1,0 +1,40 @@
+#!/usr/bin/bash
+# nyx — comando da Nyxz no terminal.
+set -euo pipefail
+
+uso() {
+  cat <<'EOF'
+Uso: nyx <comando>
+
+  run <programa> [args]   Abre um app no seu próprio escopo do systemd
+                          (conta nas Estatísticas, VPN por app etc.)
+  versao                  Mostra a versão da Nyxz
+  ajuda                   Mostra esta ajuda
+EOF
+}
+
+case "${1:-ajuda}" in
+  run)
+    shift
+    [ $# -ge 1 ] || { uso; exit 1; }
+    if command -v app2unit >/dev/null 2>&1; then
+      exec app2unit -- "$@"
+    elif command -v uwsm >/dev/null 2>&1; then
+      exec uwsm app -- "$@"
+    else
+      exec systemd-run --user --scope --quiet \
+        --unit="app-$(basename "$1")-$$" --slice=app.slice -- "$@"
+    fi
+    ;;
+  versao|version|--version)
+    echo "Nyxz $(cat /usr/share/nyxz/versao 2>/dev/null || echo '?')"
+    ;;
+  ajuda|help|-h|--help)
+    uso
+    ;;
+  *)
+    echo "nyx: comando desconhecido: $1" >&2
+    uso
+    exit 1
+    ;;
+esac

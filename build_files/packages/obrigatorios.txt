@@ -1,0 +1,43 @@
+# Núcleo: sem estes o sistema não liga ou não tem interface. Se faltar algum, o build falha.
+
+# Hyprland (COPR)
+hyprland
+
+# Vídeo (Mesa, Vulkan, VA-API)
+mesa-dri-drivers
+mesa-vulkan-drivers
+vulkan-loader
+libva-utils
+
+# Som
+pipewire
+pipewire-pulseaudio
+pipewire-alsa
+wireplumber
+rtkit
+
+# Rede
+NetworkManager
+NetworkManager-wifi
+
+# Sessão e login
+greetd
+polkit
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+xdg-user-dirs
+xdg-utils
+wl-clipboard
+qt6-qtwayland
+
+# Terminal de emergência (leve; o terminal principal é escolhido no Nyxz Setup)
+foot
+
+# Sistema
+flatpak
+btrfs-progs
+fontconfig
+google-noto-sans-fonts
+google-noto-color-emoji-fonts
+python3
+unzip
