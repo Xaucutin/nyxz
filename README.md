@@ -16,21 +16,21 @@ Distro Linux pessoal focada em programação e jogos: Hyprland com interface pr�
 - **RAM: 599 MB em uso** com o Hyprland e um terminal abertos (meta: ≤ 1 GB; teto: 1,2 GB). zram ativo.
 - Pendente conhecido: `systemd-remount-fs.service` falha em instalações feitas pelo Anaconda (problema conhecido do bootc, sem efeito visível).
 
-**Fase 1 — desktop mínimo usável: em andamento (pausada em 07/11/2026).** Já funciona na VM, a partir da imagem:
+**Fase 1 — desktop mínimo usável: concluída (07/11/2026).** Testada na VM, a partir da imagem:
 
-- Login gráfico (Quickshell + greetd no cage) → sessão Hyprland com o shell da Nyxz abrindo sozinho.
+- Login gráfico (Quickshell + greetd no cage), com aviso de senha incorreta e nova tentativa → sessão Hyprland com o shell da Nyxz abrindo sozinho.
 - Barra (logo, workspaces, apps abertos, bandeja, som, relógio), busca (Super + Espaço: apps, calculadora, energia), notificações, painel de som e menu do botão direito (Fechar, Finalizar tarefa).
-- Configurações: Rede, Som, Telas, Teclado e mouse, Atualizações e Sobre.
+- Configurações: Rede, Som, Telas, Teclado e mouse, Atualizações e Sobre. Ctrl+↓/↑ trocam de página.
+- Ajustes das Configurações aplicados na hora (ex.: Telas em 1600×900 via `~/.config/hypr/nyxz/telas.lua`).
 - Atualizações só baixam em segundo plano; nunca reiniciam o PC sozinhas.
-- RAM: 0,67 GB com shell, Configurações e três terminais abertos.
+- **RAM logo após o login: 681 MB** com a área de trabalho completa e um terminal aberto (Hyprland 157 MB, shell 78 MB, Xwayland 70 MB, portais ~86 MB).
 
-**Pendentes para retomar:**
-1. Login: esconder a barra de título que o Qt desenha dentro do cage (`QT_WAYLAND_DISABLE_WINDOWDECORATION=1` no `/usr/libexec/nyxz/greeter`).
-2. Login: depois de senha errada, chamar `Greetd.cancelSession()` e só liberar nova tentativa quando o greetd voltar ao estado inicial (hoje a 2ª tentativa dá "Connection refused"); limitar a largura da mensagem de erro.
-3. Configurações: as setas ↑/↓ não trocam de página (foco do teclado na janela).
-4. Medir a RAM parada logo após o login (sem apps) e testar a tela Telas em 1600×900 na VM.
-5. VM: apagar os restos de teste em `~/.config/quickshell/` (o `tools/vm-digitar.ps1` ainda não digita `~`; use `$HOME`).
-6. `systemd-remount-fs.service` falha em instalações pelo Anaconda (conhecido, sem efeito visível).
+**Passou para a Fase 2:** Ghostty, Dolphin e Brave são componentes opcionais e chegam pelo Nyxz Setup e pela imagem local personalizada.
+
+**Pendentes conhecidos:**
+- `systemd-remount-fs.service` falha em instalações pelo Anaconda (conhecido, sem efeito visível).
+- Xwayland (70 MB) inicia junto com a sessão; avaliar iniciar só quando um app X11 abrir.
+- Teste de RAM automático no CI (hoje medido à mão na VM).
 
 ## Ferramentas de desenvolvimento
 

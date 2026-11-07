@@ -66,7 +66,13 @@ ShellRoot {
         }
         function onError(erro) {
             console.warn("greetd: " + erro);
-            raiz.mensagem = "Não foi possível entrar. Tente de novo.";
+            // O greetd informa a senha errada como erro de autenticação.
+            if (/auth/i.test(erro)) {
+                raiz.mensagem = "Senha incorreta";
+                janela.errou();
+            } else {
+                raiz.mensagem = "Não foi possível entrar. Tente de novo.";
+            }
             Greetd.cancelSession();
             liberar.restart();
         }
