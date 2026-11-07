@@ -123,6 +123,10 @@ grep -q '^VARIANT_ID=' /usr/lib/os-release \
 mkdir -p /usr/share/nyxz
 echo "${NYXZ_VERSION}" > /usr/share/nyxz/versao
 
+# A tela de login usa o mesmo tema e os mesmos ícones do shell principal.
+ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-login/Tema.qml
+ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-login/icones
+
 # ---------------------------------------------------------------- serviços
 log "Serviços"
 chmod 0755 /usr/bin/nyx /usr/libexec/nyxz/*
@@ -147,7 +151,7 @@ for bin in Hyprland greetd foot; do
   command -v "$bin" >/dev/null 2>&1 || { echo "ERRO: $bin não está no sistema"; exit 1; }
 done
 ls /usr/share/wayland-sessions/*.desktop >/dev/null 2>&1 || { echo "ERRO: nenhuma sessão Wayland instalada"; exit 1; }
-for bin in uwsm app2unit quickshell tuigreet; do
+for bin in uwsm app2unit quickshell cage tuigreet; do
   command -v "$bin" >/dev/null 2>&1 || echo "AVISO: $bin não está no sistema"
 done
 echo "Sessões disponíveis: $(ls /usr/share/wayland-sessions/)"

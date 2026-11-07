@@ -15,21 +15,38 @@ RAIZ = Path(__file__).resolve().parent.parent
 SHELL = RAIZ / "system_files" / "etc" / "xdg" / "quickshell" / "nyxz"
 
 
-def empacotar() -> bytes:
+LOGIN = SHELL.parent / "nyxz-login"
+
+
+def empacotar(pastas) -> bytes:
+    """Junta as pastas (a última vence) num .tgz com caminhos relativos."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for arq in sorted(SHELL.rglob("*")):
-            if arq.is_file():
-                tar.add(arq, arcname=str(arq.relative_to(SHELL)).replace("\\", "/"))
+        for pasta, filtro in pastas:
+            for arq in sorted(pasta.rglob("*")):
+                rel = str(arq.relative_to(pasta)).replace("\\", "/")
+                if arq.is_file() and filtro(rel):
+                    tar.add(arq, arcname=rel)
     return buf.getvalue()
+
+
+ROTAS = {
+    "/shell.tgz": lambda: empacotar([(SHELL, lambda r: True)]),
+    # Tela de login: os arquivos dela + Tema.qml e icones/ do shell principal
+    "/login.tgz": lambda: empacotar([
+        (SHELL, lambda r: r == "Tema.qml" or r.startswith("icones/")),
+        (LOGIN, lambda r: True),
+    ]),
+}
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.rstrip("/") != "/shell.tgz":
+        rota = ROTAS.get(self.path.rstrip("/"))
+        if rota is None:
             self.send_error(404)
             return
-        dados = empacotar()
+        dados = rota()
         self.send_response(200)
         self.send_header("Content-Type", "application/gzip")
         self.send_header("Content-Length", str(len(dados)))

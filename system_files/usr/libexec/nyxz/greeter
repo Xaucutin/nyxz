@@ -1,5 +1,18 @@
 #!/usr/bin/bash
-# Tela de login provisória (fase 0). Usa o tuigreet se existir; senão, o agreety do greetd.
+# Tela de login da Nyxz: Quickshell dentro do cage (compositor de uma janela só).
+# Se faltar alguma peça, cai na tela de login em texto (tuigreet ou agreety).
+if command -v cage >/dev/null 2>&1 && command -v qs >/dev/null 2>&1 \
+   && [ -f /etc/xdg/quickshell/nyxz-login/shell.qml ]; then
+  export XKB_DEFAULT_LAYOUT=br
+  if systemd-detect-virt --quiet 2>/dev/null; then
+    # Placa de vídeo emulada: desenho por software (ver /usr/libexec/nyxz/shell).
+    export QT_QUICK_BACKEND=software
+    export WLR_RENDERER_ALLOW_SOFTWARE=1
+    export WLR_NO_HARDWARE_CURSORS=1
+  fi
+  exec cage -s -- qs -c nyxz-login
+fi
+
 if command -v tuigreet >/dev/null 2>&1; then
   exec tuigreet --time --remember --asterisks \
     --greeting "Nyxz" \

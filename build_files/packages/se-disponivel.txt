@@ -17,7 +17,9 @@ app2unit
 # Shell da Nyxz (barra, busca, notificações)
 quickshell
 
-# Tela de login em texto (fase 0; vira uma tela própria na fase 1)
+# Tela de login: cage (compositor de uma janela só) roda a tela gráfica da Nyxz.
+# O tuigreet fica como reserva em texto se o cage faltar.
+cage
 tuigreet
 
 # Lançador provisório até a busca da Nyxz ficar pronta
