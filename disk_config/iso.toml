@@ -7,7 +7,7 @@ contents = """
 lang pt_BR.UTF-8
 keyboard br
 timezone America/Sao_Paulo
-network --bootproto=dhcp --activate
+network --bootproto=dhcp --activate --hostname=nyxz
 graphical
 """
 

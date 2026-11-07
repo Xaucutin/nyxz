@@ -1,0 +1,4 @@
+# Parâmetros do kernel da Nyxz. Aplicados pelo bootc na instalação e nas atualizações.
+# quiet + loglevel=3: esconde as mensagens internas do sistema que apareciam
+# por cima da tela de login (vistas no primeiro teste em VM).
+kargs = ["quiet", "loglevel=3", "rd.udev.log_level=3", "systemd.show_status=auto"]

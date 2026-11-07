@@ -30,6 +30,23 @@ copr() {
 }
 while read -r repo; do copr "$repo"; done < <(grep -Ev '^\s*(#|$)' "$CTX/packages/copr.txt")
 
+# ---------------------------------------------------------------- codecs
+# Vem ANTES dos outros pacotes e SEM --allowerasing: no primeiro teste, trocar os
+# codecs depois, com --allowerasing, desinstalou o Hyprland sem dar erro.
+# O Mesa do Fedora vem sem H.264/HEVC por causa de patentes; sem isto, Nyxz Share,
+# replay e gravação ficariam só com AV1.
+log "Codecs completos (H.264/HEVC na placa de vídeo, ffmpeg completo)"
+if rpm -q mesa-va-drivers >/dev/null 2>&1; then
+  dnf -y swap mesa-va-drivers mesa-va-drivers-freeworld || echo "AVISO: troca do mesa-va-drivers falhou"
+else
+  dnf -y install --setopt=install_weak_deps=False mesa-va-drivers-freeworld || echo "AVISO: mesa-va-drivers-freeworld não foi instalado"
+fi
+if rpm -q ffmpeg-free >/dev/null 2>&1; then
+  dnf -y swap ffmpeg-free ffmpeg || echo "AVISO: troca do ffmpeg falhou"
+else
+  dnf -y install --setopt=install_weak_deps=False ffmpeg-libs || echo "AVISO: ffmpeg-libs não foi instalado"
+fi
+
 # ---------------------------------------------------------------- pacotes
 log "Pacotes obrigatórios"
 # shellcheck disable=SC2046
@@ -38,12 +55,6 @@ dnf -y install --setopt=install_weak_deps=False $(lista obrigatorios.txt)
 log "Pacotes se disponível"
 # shellcheck disable=SC2046
 dnf -y install --setopt=install_weak_deps=False --skip-unavailable $(lista se-disponivel.txt)
-
-log "Codecs completos (H.264/HEVC na placa de vídeo, ffmpeg completo)"
-# O Mesa do Fedora vem sem H.264/HEVC por causa de patentes. Sem isto, Nyxz Share,
-# replay e gravação ficariam só com AV1.
-dnf -y swap mesa-va-drivers mesa-va-drivers-freeworld --allowerasing || echo "AVISO: troca do mesa-va-drivers falhou"
-dnf -y swap ffmpeg-free ffmpeg --allowerasing || echo "AVISO: troca do ffmpeg falhou"
 
 # ---------------------------------------------------------------- sessão por escopos
 # uwsm e app2unit não têm pacote para o Fedora 44 nos repositórios usados.
@@ -120,6 +131,26 @@ systemctl enable greetd.service
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
 # vêm pela imagem nova, não por dnf.
 sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/_copr_*.repo 2>/dev/null || true
+
+# ---------------------------------------------------------------- conferência
+# Falha o build se algum pacote obrigatório sumiu no caminho (ex.: removido por
+# conflito) ou se a sessão não tiver o que precisa para abrir.
+log "Conferindo o núcleo"
+# shellcheck disable=SC2046
+faltando="$(rpm -q $(lista obrigatorios.txt) | grep 'is not installed' || true)"
+if [ -n "$faltando" ]; then
+  echo "ERRO: pacotes obrigatórios ausentes:"
+  echo "$faltando"
+  exit 1
+fi
+for bin in Hyprland greetd foot; do
+  command -v "$bin" >/dev/null 2>&1 || { echo "ERRO: $bin não está no sistema"; exit 1; }
+done
+ls /usr/share/wayland-sessions/*.desktop >/dev/null 2>&1 || { echo "ERRO: nenhuma sessão Wayland instalada"; exit 1; }
+for bin in uwsm app2unit quickshell tuigreet; do
+  command -v "$bin" >/dev/null 2>&1 || echo "AVISO: $bin não está no sistema"
+done
+echo "Sessões disponíveis: $(ls /usr/share/wayland-sessions/)"
 
 # ---------------------------------------------------------------- limpeza
 log "Limpeza"
