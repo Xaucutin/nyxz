@@ -223,15 +223,18 @@ ShellRoot {
                     spacing: 12
                     Titulo { texto: "Escolha os apps" }
                     Flickable {
+                        id: rolagemEscolha
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        contentWidth: width
                         contentHeight: listaEscolha.implicitHeight
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         flickDeceleration: 1800
                         ListaComponentes {
                             id: listaEscolha
-                            width: parent.width
+                            // No Flickable, "parent" é o contentItem; a largura vem do próprio Flickable.
+                            width: rolagemEscolha.width
                             catalogo: raiz.catalogo
                             marcados: raiz.marcados
                             instalados: raiz.estado ? raiz.estado.itens : ({})

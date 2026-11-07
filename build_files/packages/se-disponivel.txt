@@ -4,6 +4,8 @@
 # Ecossistema Hyprland (COPR)
 xdg-desktop-portal-hyprland
 hyprpolkitagent
+# Diálogos do próprio Hyprland (sem ele, aparece um aviso amarelo ao entrar)
+hyprland-guiutils
 # Alternativa leve ao hyprpolkitagent (que não tem pacote para o Fedora 44 no COPR usado)
 mate-polkit
 hyprlock

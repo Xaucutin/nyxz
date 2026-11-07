@@ -16,8 +16,11 @@ Linhas de progresso: "PASSO|texto"; última linha: "FIM|ok" ou "FIM|erro|mensage
 """
 import json
 import os
+import re
+import select
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 CATALOGO = Path("/usr/share/nyxz/catalogo.json")
@@ -36,15 +39,47 @@ def fim(ok=True, msg=""):
     sys.exit(0 if ok else 1)
 
 
-def rodar(cmd, mostrar=False):
+def rodar(cmd, mostrar=False, parado=900):
+    """Roda um comando. Com mostrar=True, repassa a saída como linhas "LOG|...".
+
+    flatpak, podman e dnf redesenham o progresso com \\r: cada trecho entre \\r ou \\n
+    vira uma linha, e o progresso repetido é enviado no máximo 2 vezes por segundo.
+    Se o comando ficar `parado` segundos sem escrever nada (download travado), ele
+    é encerrado e o código de saída vira 124, em vez de a tela ficar presa para sempre.
+    """
     if not mostrar:
         r = subprocess.run(cmd, capture_output=True, text=True)
         return r.returncode, r.stdout
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    for linha in p.stdout:
-        linha = linha.strip()
-        if linha:
-            print(f"LOG|{linha}", flush=True)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    fd = p.stdout.fileno()
+    resto, ultimo_envio, ultima_saida = b"", 0.0, time.monotonic()
+    while True:
+        prontos, _, _ = select.select([fd], [], [], 5)
+        agora = time.monotonic()
+        if not prontos:
+            if agora - ultima_saida > parado:
+                print(f"LOG|Sem resposta há {parado // 60} minutos; cancelando.", flush=True)
+                p.kill()
+                p.wait()
+                return 124, ""
+            continue
+        bloco = os.read(fd, 65536)
+        if not bloco:
+            break
+        ultima_saida = agora
+        dados = resto + bloco
+        fim_ = 0
+        for m in re.finditer(rb"([^\r\n]*)([\r\n])", dados):
+            fim_ = m.end()
+            linha = m.group(1).decode("utf-8", "replace").strip()
+            # Linhas terminadas em \n sempre passam; redesenhos (\r), no máximo 2/s.
+            if linha and (m.group(2) == b"\n" or agora - ultimo_envio >= 0.5):
+                print(f"LOG|{linha}", flush=True)
+                ultimo_envio = agora
+        resto = dados[fim_:]
+    linha = resto.decode("utf-8", "replace").strip()
+    if linha:
+        print(f"LOG|{linha}", flush=True)
     return p.wait(), ""
 
 
