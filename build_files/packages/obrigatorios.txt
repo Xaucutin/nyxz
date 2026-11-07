@@ -34,6 +34,8 @@ qt6-qtwayland
 foot
 
 # Sistema
+# zram: comprime a memória pouco usada (o primeiro teste mostrou swap 0 sem isto)
+zram-generator-defaults
 flatpak
 btrfs-progs
 fontconfig

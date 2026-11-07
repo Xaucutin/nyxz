@@ -5,6 +5,9 @@
 # O nome do arquivo de sessão muda conforme o pacote do Hyprland (o COPR atual instala
 # só "hyprland-uwsm.desktop"), então o Hyprland é iniciado pelo executável.
 
+# Configuração da Nyxz no lugar certo (o Hyprland 0.57 só aceita Lua).
+/usr/libexec/nyxz/hypr-config
+
 hyprland_cmd="Hyprland"
 command -v start-hyprland >/dev/null 2>&1 && hyprland_cmd="start-hyprland"
 

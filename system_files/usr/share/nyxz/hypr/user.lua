@@ -1,0 +1,6 @@
+-- Suas configurações do Hyprland. Carregado por último; a Nyxz nunca escreve aqui.
+-- Exemplo:
+--
+-- hl.config({
+--     input = { kb_layout = "us" },
+-- })

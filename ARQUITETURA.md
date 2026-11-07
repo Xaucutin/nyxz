@@ -44,11 +44,11 @@ Serviço de usuário pequeno (Rust) que acompanha escopos (criados e encerrados)
 
 ### 2.5 Configuração em camadas (evita sobrescrever o usuário)
 ```
-/usr/share/nyxz/hypr/*.conf         ← padrões da Nyxz (vêm na imagem, atualizam sozinhos)
-~/.config/hypr/nyxz/<função>.conf   ← gerado por cada função (regras de janela, espaços, atalhos)
-~/.config/hypr/user.conf            ← do usuário, nunca tocado pela Nyxz
+/usr/share/nyxz/hypr/padrao.lua     ← padrões da Nyxz (vêm na imagem, atualizam sozinhos)
+~/.config/hypr/nyxz/<função>.lua    ← gerado por cada função (regras de janela, espaços, atalhos)
+~/.config/hypr/user.lua             ← do usuário, nunca tocado pela Nyxz
 ```
-Cada função é dona de um arquivo só. O `hyprland.conf` do usuário apenas inclui os três níveis, nessa ordem.
+Cada função é dona de um arquivo só. O `hyprland.lua` do usuário apenas carrega os três níveis, nessa ordem. **O Hyprland 0.57 abandonou o formato `.conf`** e só aceita Lua; o script `/usr/libexec/nyxz/hypr-config`, rodado antes de cada sessão, cria o que faltar e troca a configuração automática que o Hyprland gera quando não acha nenhuma.
 
 ### 2.6 Interface: Quickshell em pedaços
 - **Barra, busca, notificações, menus e painéis rápidos** num único processo Quickshell.

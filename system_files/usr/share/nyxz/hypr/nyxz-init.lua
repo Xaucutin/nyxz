@@ -1,0 +1,3 @@
+-- Arquivos gerados pelas funções da Nyxz (regras de janela, espaços, atalhos).
+-- Cada função grava o próprio arquivo nesta pasta e o registra aqui.
+-- Para mudanças suas, use ~/.config/hypr/user.lua.
