@@ -32,6 +32,10 @@ Distro Linux pessoal focada em programação e jogos: Hyprland com interface pr�
 - Xwayland (70 MB) inicia junto com a sessão; avaliar iniciar só quando um app X11 abrir.
 - Teste de RAM automático no CI (hoje medido à mão na VM).
 
+**Fase 2 — fundações: em andamento.** Já no ar (commit 983f01a): catálogo de componentes, motor `/usr/libexec/nyxz/componentes` (Flatpak na conta do usuário + imagem local personalizada para apps nativos), Nyxz Setup no primeiro login e Configurações → Apps e componentes. Na VM, o Setup abre e as telas funcionam.
+
+**Pendente atual:** instalando o perfil Sugerido, o `flatpak install --user` do Brave parou em "Installing runtime/org.freedesktop.Platform.Locale" (download parado). Investigar antes de testar a parte nativa (pkexec + podman build).
+
 ## Ferramentas de desenvolvimento
 
 - `tools/dev-servidor.py`: serve o shell, o login e as Configurações em `http://127.0.0.1/` (na VM: `10.0.2.2`). Na VM, `nyx dev` baixa o shell e reinicia; `nyx dev limpar` volta ao da imagem.
