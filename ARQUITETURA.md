@@ -259,9 +259,12 @@ Tudo entra na v1.0, mas construído em fases. **Cada fase termina com uma ISO qu
 - Meta: instalar numa VM e entrar num Hyprland com terminal.
 
 **Fase 1 — Desktop mínimo usável**
-- Login (greetd), sessão com uwsm, configuração em camadas, tema, fontes.
+- Login **gráfico** da Nyxz (greeter em Quickshell sobre o greetd), sessão com uwsm, configuração em camadas, tema, fontes.
 - Quickshell: barra, busca básica, notificações, painel de som simples, menu de energia.
+- App de Configurações com as primeiras telas: Rede (Wi-Fi), Som, Telas, Teclado e mouse, Atualizações e Sobre.
 - Ghostty, Dolphin, Brave. Teste de RAM passando.
+
+**Regra que vale para todas as fases:** nada exige terminal. Uma função só conta como pronta quando tudo dela pode ser feito pela interface, e todo erro aparece como notificação explicada, com botão para resolver (ver PROJETO.md, "Regra: nada exige terminal").
 
 **Fase 2 — Fundações**
 - `nyxz-scoped`, `nyxz-audio`, `nyxz-netd`, catálogo YAML, imagem local personalizada, Nyxz Setup e "Apps e componentes".

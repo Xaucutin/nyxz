@@ -17,6 +17,7 @@ Distro Linux focada em programação, com visual próprio e polido, a liberdade 
 | Spotify | Marcado por padrão no instalador, com Spicetify (Marketplace + tema Nyxz), reaplicado automaticamente depois de cada atualização. |
 | Navegador | Brave como sugestão no instalador (Firefox ou nenhum também são opções), Wayland nativo, decodificação de vídeo por hardware (VA-API) na RX 7600. Interruptores para aceleração gráfica e acesso à internet (firewall por app) no menu da barra e nas configurações. |
 | IA local | Ollama **não** entra. |
+| Sem terminal obrigatório | Tudo o que o usuário precisa fazer tem tela e botões. O terminal e o comando `nyx` existem para quem quiser, mas nenhuma tarefa depende deles. Ver "Regra: nada exige terminal". |
 | Tudo opcional | Fora o núcleo mínimo, tudo é escolhido no instalador e pode ser mudado depois em Configurações → Apps e componentes. Ver "Instalação: tudo opcional". |
 | RAM | Regra fixa: o sistema parado, logo após o login e sem apps abertos, usa **menos RAM que o Windows 11** na mesma máquina. Meta ≤ 1 GB, teto 1,2 GB. Ver "Orçamento de RAM". |
 
@@ -45,6 +46,41 @@ Distro Linux focada em programação, com visual próprio e polido, a liberdade 
 - Toda funcionalidade nova entra com o custo de RAM anotado. Se estourar o orçamento, ela vira opcional ou sob demanda.
 
 **Verificação automática:** o build no GitHub Actions liga a imagem numa máquina virtual (QEMU), faz login, espera 2 minutos e mede a RAM. **Se passar do teto, o build falha** e a ISO não é publicada. Além disso, conferir no PC real, porque o driver de vídeo muda um pouco o número.
+
+## Regra: nada exige terminal
+
+O usuário **nunca precisa** digitar comandos ou editar arquivos de configuração. Quem gosta pode usar o terminal e o `nyx`, mas sempre existe um jeito com tela e botões.
+
+**Como garantir:**
+- **Critério de "pronto":** uma função só está pronta quando tudo dela pode ser feito pela interface. Comando sem tela equivalente não conta.
+- **Erros na tela, não no terminal:** quando algo falha, aparece uma notificação explicando em português, com botão para resolver (ou abrir o Nyxz Doctor). Nada de "veja o log".
+- **Arquivos de configuração escondidos:** as telas gravam os arquivos por baixo (Hyprland, PipeWire, rede). Quem quiser editar à mão pode, e a tela respeita o que foi editado.
+- **Instalar apps sem comando:** pela tela "Apps e componentes" e por uma loja de apps (Flatpak), com busca e um clique.
+- **Atualizar e voltar versão sem comando:** botão "Atualizar agora", agendamento e "Voltar para a versão anterior" nas Configurações (por baixo, o `bootc`).
+- **Login gráfico:** a tela de login em texto da fase 0 é provisória; na fase 1 vira uma tela gráfica da Nyxz.
+
+**Telas de Configurações que precisam existir** (além das telas de cada função):
+
+| Tela | O que resolve sem comando |
+|---|---|
+| Rede | Wi-Fi, cabo, VPN, proxy, DNS, LAN virtual |
+| Bluetooth | Parear fones, controles, teclados |
+| Som | Saídas, entradas, volume por app, perfis, microfone |
+| Telas | Resolução, Hz (180 Hz), posição, escala, rotação, VRR, monitor principal |
+| Teclado e mouse | Layout (ABNT2, US…), velocidade, aceleração, botões, touchpad |
+| Aparência | Tema, cores, fontes, cantos, animações, wallpaper |
+| Barra e Ajustes | Tudo da tela de Ajustes (equivalentes ao Windhawk) |
+| Atalhos | Ver, mudar e criar atalhos, com aviso de conflito |
+| Apps e componentes | Catálogo da instalação, loja de apps, apps abertos ao iniciar |
+| Atualizações | Atualizar agora, agendar, histórico, voltar versão |
+| Usuários e senha | Trocar senha, foto, criar e remover usuários |
+| Data, hora e idioma | Fuso, formato, idioma, sincronização do relógio, dual boot |
+| Energia | Suspender, desligar a tela, perfis de desempenho |
+| Impressoras e scanners | Adicionar e gerenciar |
+| Discos e armazenamento | Montar discos e pendrives, formatar, saúde (Discos) |
+| Privacidade | Permissões por app, indicadores |
+| Backup e versões anteriores | Snapshots, backup, Nyxz Sync |
+| Sobre | Versão, hardware, uso de RAM, relatório para pedir ajuda |
 
 ## Instalação: tudo opcional
 
