@@ -113,7 +113,8 @@ Pagina {
             onClicado: {
                 p.estado = "procurando";
                 p.mensagem = "";
-                acao.rodar(["pkexec", "bootc", "upgrade"]);
+                // Com apps nativos escolhidos, a imagem local é reconstruída sobre a base nova.
+                acao.rodar(["pkexec", "/usr/libexec/nyxz/atualizar"]);
             }
         }
         Botao {

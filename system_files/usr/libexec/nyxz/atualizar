@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+# Atualização em segundo plano (nyxz-atualizar.service). Só prepara a nova versão
+# para o próximo boot; nunca reinicia o PC.
+# Com apps nativos escolhidos, reconstrói a imagem local sobre a base nova.
+set -u
+if [ -s /etc/nyxz/componentes-sistema.json ] \
+   && python3 -I -c 'import json,sys; sys.exit(0 if json.load(open("/etc/nyxz/componentes-sistema.json")).get("itens") else 1)'; then
+  exec /usr/libexec/nyxz/componentes reconstruir
+fi
+exec /usr/bin/bootc upgrade --quiet

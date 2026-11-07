@@ -1,0 +1,6 @@
+#!/usr/bin/bash
+# Abre o Nyxz Setup (escolha de apps e componentes).
+if systemd-detect-virt --quiet 2>/dev/null; then
+  export QT_QUICK_BACKEND=software
+fi
+exec qs -c nyxz-setup

@@ -1,0 +1,205 @@
+#!/usr/bin/python3 -I
+"""Componentes opcionais da Nyxz (ARQUITETURA.md, seções 1 e 2.7).
+
+- Apps Flatpak vão para a conta do usuário (sem senha de administrador).
+- Apps nativos (rpm) entram numa imagem local personalizada:
+  FROM <imagem base da Nyxz> + os pacotes escolhidos, construída com podman
+  como root e ativada com `bootc switch --transport containers-storage`.
+  Vale no próximo boot. O timer de atualização reconstrói quando a base muda.
+
+Comandos (a saída é lida pelo Nyxz Setup e pelas Configurações):
+  componentes estado                         -> JSON
+  componentes usuario --instalar a,b --remover c
+  componentes sistema a,b,c                  (root) lista COMPLETA de itens nativos desejados
+  componentes reconstruir                    (root) usado pelo timer de atualização
+Linhas de progresso: "PASSO|texto"; última linha: "FIM|ok" ou "FIM|erro|mensagem".
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+CATALOGO = Path("/usr/share/nyxz/catalogo.json")
+ESCOLHA_SISTEMA = Path("/etc/nyxz/componentes-sistema.json")
+PASTA_IMAGEM = Path("/var/lib/nyxz/imagem")
+IMAGEM_LOCAL = "localhost/nyxz-local:latest"
+FLATHUB = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+
+def passo(texto):
+    print(f"PASSO|{texto}", flush=True)
+
+
+def fim(ok=True, msg=""):
+    print("FIM|ok" if ok else f"FIM|erro|{msg}", flush=True)
+    sys.exit(0 if ok else 1)
+
+
+def rodar(cmd, mostrar=False):
+    if not mostrar:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.returncode, r.stdout
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for linha in p.stdout:
+        linha = linha.strip()
+        if linha:
+            print(f"LOG|{linha}", flush=True)
+    return p.wait(), ""
+
+
+def catalogo():
+    return json.loads(CATALOGO.read_text(encoding="utf-8"))
+
+
+def imagem_base():
+    try:
+        return Path("/usr/share/nyxz/imagem-base").read_text().strip()
+    except OSError:
+        return "ghcr.io/xaucutin/nyxz:44"
+
+
+def implantacoes():
+    codigo, saida = rodar(["rpm-ostree", "status", "--json"])
+    if codigo != 0:
+        return None, False
+    lista = json.loads(saida).get("deployments", [])
+    iboot = next((i for i, d in enumerate(lista) if d.get("booted")), -1)
+    ref = lista[iboot].get("container-image-reference", "") if iboot >= 0 else ""
+    return ref, iboot > 0
+
+
+def flatpaks_instalados():
+    _, saida = rodar(["flatpak", "list", "--app", "--columns=application"])
+    return set(saida.split())
+
+
+def estado():
+    cat = catalogo()
+    fps = flatpaks_instalados()
+    itens = {}
+    for it in cat["itens"]:
+        if it["tipo"] == "flatpak":
+            itens[it["id"]] = it["flatpak"] in fps
+        else:
+            codigo, _ = rodar(["rpm", "-q", *it["pacotes"]])
+            itens[it["id"]] = codigo == 0
+    ref, pendente = implantacoes()
+    escolhidos = []
+    if ESCOLHA_SISTEMA.exists():
+        escolhidos = json.loads(ESCOLHA_SISTEMA.read_text()).get("itens", [])
+    print(json.dumps({
+        "itens": itens,
+        "escolhidosSistema": escolhidos,
+        "imagemLocal": "containers-storage" in (ref or ""),
+        "reinicioPendente": pendente,
+    }))
+
+
+def usuario(instalar, remover):
+    cat = {i["id"]: i for i in catalogo()["itens"]}
+    rodar(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", FLATHUB])
+    falhas = []
+    for iid in instalar:
+        it = cat.get(iid)
+        if not it or it["tipo"] != "flatpak":
+            continue
+        passo(f"Instalando {it['nome']}")
+        codigo, _ = rodar(["flatpak", "install", "--user", "-y", "--noninteractive", "flathub", it["flatpak"]], mostrar=True)
+        if codigo != 0:
+            falhas.append(it["nome"])
+    for iid in remover:
+        it = cat.get(iid)
+        if not it or it["tipo"] != "flatpak":
+            continue
+        passo(f"Removendo {it['nome']}")
+        rodar(["flatpak", "uninstall", "--user", "-y", "--noninteractive", it["flatpak"]], mostrar=True)
+    if falhas:
+        fim(False, "Não foi possível instalar: " + ", ".join(falhas))
+    fim()
+
+
+def construir(ids, puxar="newer"):
+    cat = catalogo()
+    itens = [i for i in cat["itens"] if i["id"] in ids and i["tipo"] == "rpm"]
+    pacotes = sorted({p for i in itens for p in i["pacotes"]})
+    repos = sorted({cat["repositorios"][r] for i in itens for r in i.get("repos", [])})
+    liga = " ".join(f"sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/{r};" for r in repos)
+    desliga = " ".join(f"sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/{r};" for r in repos)
+    PASTA_IMAGEM.mkdir(parents=True, exist_ok=True)
+    (PASTA_IMAGEM / "Containerfile").write_text(
+        "# Gerado por /usr/libexec/nyxz/componentes. Não edite: use Configurações → Apps e componentes.\n"
+        f"FROM {imagem_base()}\n"
+        f"RUN set -e; {liga} "
+        f"dnf -y install --setopt=install_weak_deps=False {' '.join(pacotes)}; "
+        f"{desliga} dnf clean all; rm -rf /var/log/dnf5.log* /tmp/* /var/cache/*\n"
+        f'LABEL org.nyxz.componentes="{",".join(i["id"] for i in itens)}"\n',
+        encoding="utf-8",
+    )
+    passo("Montando a imagem personalizada (baixa a base e os apps; pode levar alguns minutos)")
+    codigo, _ = rodar(["podman", "build", f"--pull={puxar}", "-t", IMAGEM_LOCAL, str(PASTA_IMAGEM)], mostrar=True)
+    if codigo != 0:
+        fim(False, "A montagem da imagem falhou. Verifique a internet e tente de novo.")
+    ref, _ = implantacoes()
+    passo("Preparando a nova versão para o próximo boot")
+    if "containers-storage" in (ref or ""):
+        codigo, _ = rodar(["bootc", "upgrade"], mostrar=True)
+    else:
+        codigo, _ = rodar(["bootc", "switch", "--transport", "containers-storage", IMAGEM_LOCAL], mostrar=True)
+    if codigo != 0:
+        fim(False, "Não foi possível preparar a nova versão do sistema.")
+    rodar(["podman", "image", "prune", "-f"])
+
+
+def sistema(ids):
+    if os.geteuid() != 0:
+        fim(False, "Precisa de permissão de administrador.")
+    cat = catalogo()
+    validos = [i["id"] for i in cat["itens"] if i["tipo"] == "rpm" and i["id"] in ids]
+    ESCOLHA_SISTEMA.parent.mkdir(parents=True, exist_ok=True)
+    ESCOLHA_SISTEMA.write_text(json.dumps({"itens": validos}, ensure_ascii=False))
+    ref, _ = implantacoes()
+    if not validos:
+        if "containers-storage" in (ref or ""):
+            passo("Voltando para a imagem padrão da Nyxz (sem apps nativos extras)")
+            codigo, _ = rodar(["bootc", "switch", imagem_base()], mostrar=True)
+            if codigo != 0:
+                fim(False, "Não foi possível voltar para a imagem padrão.")
+            rodar(["podman", "rmi", "-f", IMAGEM_LOCAL])
+        fim()
+    construir(validos)
+    fim()
+
+
+def reconstruir():
+    if os.geteuid() != 0:
+        fim(False, "Precisa de permissão de administrador.")
+    ids = []
+    if ESCOLHA_SISTEMA.exists():
+        ids = json.loads(ESCOLHA_SISTEMA.read_text()).get("itens", [])
+    if not ids:
+        codigo, _ = rodar(["bootc", "upgrade", "--quiet"], mostrar=True)
+        fim(codigo == 0, "bootc upgrade falhou")
+    construir(ids, puxar="always")
+    fim()
+
+
+def lista(arg):
+    return [x for x in (arg or "").split(",") if x]
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if not args or args[0] == "estado":
+        estado()
+    elif args[0] == "usuario":
+        inst = lista(args[args.index("--instalar") + 1]) if "--instalar" in args else []
+        rem = lista(args[args.index("--remover") + 1]) if "--remover" in args else []
+        usuario(inst, rem)
+    elif args[0] == "sistema":
+        sistema(lista(args[1] if len(args) > 1 else ""))
+    elif args[0] == "reconstruir":
+        reconstruir()
+    else:
+        print(__doc__)
+        sys.exit(1)

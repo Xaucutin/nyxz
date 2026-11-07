@@ -14,6 +14,7 @@ ShellRoot {
         { id: "som", nome: "Som" },
         { id: "telas", nome: "Telas" },
         { id: "teclado", nome: "Teclado e mouse" },
+        { id: "componentes", nome: "Apps e componentes" },
         { id: "atualizacoes", nome: "Atualizações" },
         { id: "sobre", nome: "Sobre" }
     ]
@@ -141,7 +142,8 @@ ShellRoot {
                         opacity: ativa ? 1 : 0
                         source: {
                             const mapa = { rede: "PaginaRede.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
-                                           teclado: "PaginaTeclado.qml", atualizacoes: "PaginaAtualizacoes.qml", sobre: "PaginaSobre.qml" };
+                                           teclado: "PaginaTeclado.qml", componentes: "PaginaComponentes.qml",
+                                           atualizacoes: "PaginaAtualizacoes.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];
                         }
                         transform: Translate { y: ativa ? 0 : 10 }

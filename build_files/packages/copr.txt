@@ -2,3 +2,5 @@
 # (ver ARQUITETURA.md, seção 1: o Hyprland saiu dos repositórios oficiais do Fedora).
 ashbuk/Hyprland-Fedora
 errornointernet/quickshell
+# Só o repositório (desligado): o Ghostty entra na imagem local quando escolhido.
+scottames/ghostty

@@ -138,6 +138,18 @@ hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),     { locked = true })
 hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),   { locked = true })
 
+----------------------
+---- JANELAS ----
+----------------------
+-- O Nyxz Setup abre em tela cheia.
+tentar(function()
+    hl.window_rule({
+        name  = "nyxz-setup-tela-cheia",
+        match = { title = "^Nyxz Setup$" },
+        fullscreen = true,
+    })
+end)
+
 ----------------------------------------
 ---- AJUSTES FEITOS PELAS CONFIGURAÇÕES ----
 ----------------------------------------
@@ -158,6 +170,8 @@ end
 hl.on("hyprland.start", function()
     -- Shell da Nyxz: barra, busca, notificações e painéis
     hl.exec_cmd("nyx run /usr/libexec/nyxz/shell")
+    -- Nyxz Setup no primeiro login (escolha de apps; nada é obrigatório)
+    hl.exec_cmd("/usr/libexec/nyxz/setup-primeiro-login")
     -- Agente de permissões (pede a senha quando um app precisa de administrador)
     hl.exec_cmd("/usr/libexec/nyxz/polkit-agent")
 end)

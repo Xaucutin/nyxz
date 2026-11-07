@@ -1,0 +1,6 @@
+#!/usr/bin/bash
+# No primeiro login de cada usuário, abre o Nyxz Setup. Depois de concluído
+# (ou pulado), ~/.config/nyxz/setup.json existe e ele não abre mais sozinho.
+[ -f "$HOME/.config/nyxz/setup.json" ] && exit 0
+sleep 2   # deixa a barra aparecer primeiro
+exec nyx run /usr/libexec/nyxz/setup

@@ -52,6 +52,7 @@ jobs:
           build-args: |
             FEDORA_VERSION=${{ env.FEDORA_VERSION }}
             NYXZ_VERSION=${{ env.NYXZ_VERSION }}
+            NYXZ_IMAGE_BASE=${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.FEDORA_VERSION }}
           oci: false
 
       - name: Publicar no GitHub Container Registry

@@ -1,0 +1,8 @@
+# Repositório oficial do VS Code. Desligado no sistema: só é usado quando o VS Code
+# é escolhido e entra na imagem local personalizada (ver /usr/libexec/nyxz/componentes).
+[code]
+name=Visual Studio Code
+baseurl=https://packages.microsoft.com/yumrepos/vscode
+enabled=0
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc

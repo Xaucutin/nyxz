@@ -122,6 +122,8 @@ grep -q '^VARIANT_ID=' /usr/lib/os-release \
   || echo 'VARIANT_ID=nyxz' >> /usr/lib/os-release
 mkdir -p /usr/share/nyxz
 echo "${NYXZ_VERSION}" > /usr/share/nyxz/versao
+echo "${NYXZ_IMAGE_BASE:-ghcr.io/xaucutin/nyxz:${FEDORA_VERSION}}" > /usr/share/nyxz/imagem-base
+python3 -I -c 'import json; json.load(open("/usr/share/nyxz/catalogo.json"))' || { echo "ERRO: catalogo.json inválido"; exit 1; }
 
 # A tela de login usa o mesmo tema e os mesmos ícones do shell principal.
 ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-login/Tema.qml
@@ -130,6 +132,12 @@ ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-login/icones
 ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-config/Tema.qml
 ln -sf ../nyxz/Deslizante.qml /etc/xdg/quickshell/nyxz-config/Deslizante.qml
 ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-config/icones
+# O Nyxz Setup reaproveita o tema, os ícones e os componentes das Configurações.
+ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-setup/Tema.qml
+ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-setup/icones
+for f in Botao.qml ListaComponentes.qml Executor.qml; do
+  ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-setup/$f"
+done
 
 # ---------------------------------------------------------------- serviços
 log "Serviços"
