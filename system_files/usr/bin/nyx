@@ -26,6 +26,24 @@ case "${1:-ajuda}" in
         --unit="app-$(basename "$1")-$$" --slice=app.slice -- "$@"
     fi
     ;;
+  dev)
+    # Desenvolvimento: baixa o shell do PC hospedeiro (servidor em 10.0.2.2, a rede NAT
+    # do VirtualBox) e reinicia o shell com ele. "nyx dev limpar" volta ao da imagem.
+    destino="$HOME/.config/quickshell/nyxz"
+    if [ "${2:-}" = "limpar" ]; then
+      rm -rf "$destino"
+      echo "Shell de desenvolvimento removido; usando o da imagem."
+    else
+      tmp="$(mktemp -d)"
+      curl -fsS "${NYXZ_DEV_URL:-http://10.0.2.2/shell.tgz}" -o "$tmp/shell.tgz" || { echo "Servidor de desenvolvimento não respondeu." >&2; exit 1; }
+      rm -rf "$destino" && mkdir -p "$destino"
+      tar xzf "$tmp/shell.tgz" -C "$destino"
+      rm -rf "$tmp"
+      echo "Shell de desenvolvimento atualizado."
+    fi
+    pkill -x quickshell 2>/dev/null; pkill -x qs 2>/dev/null; sleep 0.3
+    setsid -f nyx run /usr/libexec/nyxz/shell >/dev/null 2>&1
+    ;;
   versao|version|--version)
     echo "Nyxz $(cat /usr/share/nyxz/versao 2>/dev/null || echo '?')"
     ;;

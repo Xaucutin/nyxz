@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+# "Finalizar tarefa": encerra à força o app e todos os processos filhos.
+# Se o app roda no próprio escopo do systemd (aberto pela barra, busca ou `nyx run`),
+# o escopo inteiro é finalizado; senão, só o processo.
+pid="${1:-}"
+[[ "$pid" =~ ^[0-9]+$ ]] || { echo "uso: finalizar <pid>" >&2; exit 1; }
+
+escopo="$(grep -o 'app[^/]*\.scope' "/proc/$pid/cgroup" 2>/dev/null | tail -n1)"
+if [ -n "$escopo" ] && systemctl --user kill --signal=SIGKILL "$escopo" 2>/dev/null; then
+  exit 0
+fi
+kill -9 "$pid"

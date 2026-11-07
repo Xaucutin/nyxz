@@ -1,0 +1,9 @@
+#!/usr/bin/bash
+# Inicia o shell da Nyxz (Quickshell).
+# Em máquina virtual, a placa de vídeo emulada quebra o desenho acelerado do Qt
+# (erro "invalid arguments for wl_surface.attach" visto no VirtualBox), então o
+# desenho é feito por software só nesse caso. No PC real, segue acelerado.
+if systemd-detect-virt --quiet 2>/dev/null; then
+  export QT_QUICK_BACKEND=software
+fi
+exec qs -c nyxz "$@"

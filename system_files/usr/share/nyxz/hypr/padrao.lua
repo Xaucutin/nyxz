@@ -24,7 +24,8 @@ hl.monitor({
 ---- PROGRAMAS ----
 ------------------
 local terminal = "nyx run /usr/libexec/nyxz/terminal"
-local lancador = "nyx run fuzzel"
+-- Busca da Nyxz (Quickshell); o fuzzel fica como reserva se o shell não estiver rodando.
+local lancador = "qs -c nyxz ipc call busca alternar || nyx run fuzzel"
 
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
@@ -141,6 +142,8 @@ hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_S
 ---- INICIALIZAÇÃO ----
 -----------------------
 hl.on("hyprland.start", function()
+    -- Shell da Nyxz: barra, busca, notificações e painéis
+    hl.exec_cmd("nyx run /usr/libexec/nyxz/shell")
     -- Agente de permissões (pede a senha quando um app precisa de administrador)
     hl.exec_cmd("/usr/libexec/nyxz/polkit-agent")
 end)

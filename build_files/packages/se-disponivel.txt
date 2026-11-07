@@ -26,5 +26,9 @@ fuzzel
 # Firmware da placa de vídeo AMD
 amd-gpu-firmware
 
+# Ícones dos apps na barra e na busca
+hicolor-icon-theme
+adwaita-icon-theme
+
 # Ferramentas de diagnóstico leves
 vulkan-tools

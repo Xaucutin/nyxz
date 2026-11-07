@@ -29,6 +29,8 @@ xdg-user-dirs
 xdg-utils
 wl-clipboard
 qt6-qtwayland
+# Ícones SVG da interface da Nyxz
+qt6-qtsvg
 
 # Terminal de emergência (leve; o terminal principal é escolhido no Nyxz Setup)
 foot
