@@ -42,20 +42,20 @@ ShellRoot {
         RowLayout {
             anchors.fill: parent
             spacing: 0
-            focus: true
-            Component.onCompleted: forceActiveFocus()
 
-            // Teclado: ↑/↓ (ou Ctrl+Tab) trocam de página; Esc fecha.
-            Keys.onPressed: event => {
-                if (event.key === Qt.Key_Down || (event.key === Qt.Key_Tab && event.modifiers & Qt.ControlModifier))
-                    raiz.atual = (raiz.atual + 1) % raiz.paginas.length;
-                else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab)
-                    raiz.atual = (raiz.atual + raiz.paginas.length - 1) % raiz.paginas.length;
-                else if (event.key === Qt.Key_Escape)
-                    Qt.quit();
-                else
-                    return;
-                event.accepted = true;
+            // Teclado: Ctrl+↓/Ctrl+↑ (ou Ctrl+Tab/Ctrl+Shift+Tab) trocam de página; Esc fecha.
+            // Atalhos da janela inteira: funcionam mesmo com o foco num campo de texto.
+            Shortcut {
+                sequences: ["Ctrl+Down", "Ctrl+Tab", "Ctrl+PgDown"]
+                onActivated: raiz.atual = (raiz.atual + 1) % raiz.paginas.length
+            }
+            Shortcut {
+                sequences: ["Ctrl+Up", "Ctrl+Shift+Tab", "Ctrl+PgUp"]
+                onActivated: raiz.atual = (raiz.atual + raiz.paginas.length - 1) % raiz.paginas.length
+            }
+            Shortcut {
+                sequence: "Esc"
+                onActivated: Qt.quit()
             }
 
             // ------------------------------------------------ menu lateral

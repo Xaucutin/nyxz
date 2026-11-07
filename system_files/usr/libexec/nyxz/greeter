@@ -4,6 +4,8 @@
 if command -v cage >/dev/null 2>&1 && command -v qs >/dev/null 2>&1 \
    && [ -f /etc/xdg/quickshell/nyxz-login/shell.qml ]; then
   export XKB_DEFAULT_LAYOUT=br
+  # Sem a barra de título que o Qt desenha quando o compositor (cage) não decora.
+  export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
   if systemd-detect-virt --quiet 2>/dev/null; then
     # Placa de vídeo emulada: desenho por software (ver /usr/libexec/nyxz/shell).
     export QT_QUICK_BACKEND=software

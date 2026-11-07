@@ -55,16 +55,27 @@ ShellRoot {
         function onReadyToLaunch() {
             Greetd.launch(["/usr/libexec/nyxz/session"], [], true);
         }
+        // Depois de uma falha, a sessão antiga é cancelada e a nova tentativa só é
+        // liberada um instante depois. Sem isso, tentar de novo rápido demais dava
+        // "Connection refused" (visto no teste em VM).
         function onAuthFailure(mensagem) {
             raiz.mensagem = "Senha incorreta";
-            raiz.ocupado = false;
             janela.errou();
+            Greetd.cancelSession();
+            liberar.restart();
         }
         function onError(erro) {
-            raiz.mensagem = "Não foi possível entrar: " + erro;
-            raiz.ocupado = false;
+            console.warn("greetd: " + erro);
+            raiz.mensagem = "Não foi possível entrar. Tente de novo.";
             Greetd.cancelSession();
+            liberar.restart();
         }
+    }
+
+    Timer {
+        id: liberar
+        interval: 800
+        onTriggered: raiz.ocupado = false
     }
 
     FloatingWindow {
@@ -193,9 +204,14 @@ ShellRoot {
             }
 
             Text {
-                Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true
+                Layout.maximumWidth: centro.width
                 Layout.topMargin: 12
-                Layout.preferredHeight: 18
+                Layout.preferredHeight: 36
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
                 text: raiz.mensagem
                 font.family: Tema.fonte
                 font.pixelSize: 13

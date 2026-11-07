@@ -20,6 +20,10 @@ $mapa = @{
   '}' = $shift + @("2b","ab") + $soltaShift
   '\' = @("56","d6")
   '|' = $shift + @("56","d6") + $soltaShift
+  # Teclas mortas do ABNT2: o acento sai sozinho quando seguido de espaço.
+  '~' = @("28","a8","39","b9")
+  '^' = $shift + @("28","a8") + $soltaShift + @("39","b9")
+  '`' = $shift + @("1a","9a") + $soltaShift + @("39","b9")
 }
 
 $buffer = ""
