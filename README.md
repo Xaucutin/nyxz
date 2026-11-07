@@ -8,7 +8,15 @@ Distro Linux pessoal focada em programação e jogos: Hyprland com interface pr�
 
 ## Estado
 
-**Fase 0 — esqueleto e CI.** A imagem base (núcleo) e a ISO são geradas pelo GitHub Actions. Ainda não foi testada: use só em máquina virtual.
+**Fase 0 — esqueleto e CI: concluída (07/11/2026).** A imagem base (núcleo) e a ISO são geradas pelo GitHub Actions e foram testadas numa VM do VirtualBox:
+
+- Instalador interativo em português; só mexe no disco depois de confirmar.
+- Login (provisório, em texto) → Hyprland 0.57 com a configuração da Nyxz em Lua.
+- Atualização pelo `bootc upgrade` funcionando (baixa só o que mudou).
+- **RAM: 599 MB em uso** com o Hyprland e um terminal abertos (meta: ≤ 1 GB; teto: 1,2 GB). zram ativo.
+- Pendente conhecido: `systemd-remount-fs.service` falha em instalações feitas pelo Anaconda (problema conhecido do bootc, sem efeito visível).
+
+Ainda é uma base sem interface própria: use só em máquina virtual. Próximo passo: Fase 1 (login gráfico, barra, busca, notificações e as primeiras telas de Configurações).
 
 ## Estrutura
 

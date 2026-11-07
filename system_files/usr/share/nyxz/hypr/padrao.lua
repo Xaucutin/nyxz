@@ -71,6 +71,7 @@ hl.config({
 
     misc = {
         disable_hyprland_logo   = true,
+        disable_splash_rendering = true,
         force_default_wallpaper = 0,
         background_color        = 0xff09090d,
         -- VRR (FreeSync) só em tela cheia, para não piscar no desktop.
