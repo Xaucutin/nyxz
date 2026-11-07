@@ -1,7 +1,14 @@
 #!/usr/bin/bash
 # Inicia a sessão da Nyxz. Com o uwsm, cada app roda no seu próprio escopo do systemd,
 # que é a base das Estatísticas, da VPN por app e de outras funções (ARQUITETURA.md, 2.1).
+#
+# O nome do arquivo de sessão muda conforme o pacote do Hyprland (o COPR atual instala
+# só "hyprland-uwsm.desktop"), então o Hyprland é iniciado pelo executável.
+
+hyprland_cmd="Hyprland"
+command -v start-hyprland >/dev/null 2>&1 && hyprland_cmd="start-hyprland"
+
 if command -v uwsm >/dev/null 2>&1; then
-  exec uwsm start -- hyprland.desktop
+  exec uwsm start -D Hyprland -N Hyprland -- "$hyprland_cmd"
 fi
-exec Hyprland
+exec "$hyprland_cmd"
