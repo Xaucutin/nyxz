@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+# Agente de permissões (a janela que pede a senha quando um app precisa de administrador).
+# Usa o hyprpolkitagent se existir; senão, o agente do MATE, que é leve.
+if systemctl --user list-unit-files hyprpolkitagent.service >/dev/null 2>&1 \
+   && systemctl --user cat hyprpolkitagent.service >/dev/null 2>&1; then
+  exec systemctl --user start hyprpolkitagent.service
+fi
+for agente in /usr/libexec/hyprpolkitagent /usr/libexec/polkit-mate-authentication-agent-1; do
+  if [ -x "$agente" ]; then exec "$agente"; fi
+done
+echo "Nenhum agente de permissões encontrado" >&2
+exit 1

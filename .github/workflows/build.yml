@@ -31,7 +31,7 @@ jobs:
           sudo docker image prune --all --force
           df -h /
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Nome da imagem em minúsculas
         run: echo "IMAGE_REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
@@ -41,7 +41,7 @@ jobs:
 
       - name: Construir
         id: build
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@v3
         with:
           containerfiles: ./Containerfile
           image: ${{ env.IMAGE_NAME }}
@@ -56,7 +56,7 @@ jobs:
 
       - name: Publicar no GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@v3
         with:
           image: ${{ steps.build.outputs.image }}
           tags: ${{ steps.build.outputs.tags }}

@@ -21,7 +21,7 @@ jobs:
           sudo docker image prune --all --force
           df -h /
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Nome da imagem
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/nyxz:${FEDORA_VERSION}" >> "$GITHUB_ENV"
@@ -48,7 +48,7 @@ jobs:
           sudo find output -name '*.iso' -exec ls -lh {} \;
 
       - name: Guardar a ISO
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: nyxz-${{ env.FEDORA_VERSION }}-iso
           path: output/bootiso/*.iso

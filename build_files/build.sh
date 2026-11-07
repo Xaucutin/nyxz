@@ -45,6 +45,37 @@ log "Codecs completos (H.264/HEVC na placa de vídeo, ffmpeg completo)"
 dnf -y swap mesa-va-drivers mesa-va-drivers-freeworld --allowerasing || echo "AVISO: troca do mesa-va-drivers falhou"
 dnf -y swap ffmpeg-free ffmpeg --allowerasing || echo "AVISO: troca do ffmpeg falhou"
 
+# ---------------------------------------------------------------- sessão por escopos
+# uwsm e app2unit não têm pacote para o Fedora 44 nos repositórios usados.
+# Instalados do código-fonte, em versões fixas (ARQUITETURA.md, 2.1).
+log "app2unit e uwsm (código-fonte)"
+APP2UNIT_VERSION="v1.4.4"
+UWSM_VERSION="v0.27.1"
+
+if ! command -v app2unit >/dev/null 2>&1; then
+  curl -fsSL "https://raw.githubusercontent.com/Vladimir-csp/app2unit/${APP2UNIT_VERSION}/app2unit" -o /usr/bin/app2unit \
+    && chmod 0755 /usr/bin/app2unit \
+    || echo "AVISO: app2unit não foi instalado"
+fi
+
+if ! command -v uwsm >/dev/null 2>&1; then
+  dnf -y install --setopt=install_weak_deps=False python3-dbus python3-pyxdg newt
+  build_deps="meson ninja-build scdoc git-core"
+  # shellcheck disable=SC2086
+  dnf -y install --setopt=install_weak_deps=False $build_deps
+  tmp="$(mktemp -d)"
+  if git clone --depth 1 --branch "${UWSM_VERSION}" https://github.com/Vladimir-csp/uwsm.git "$tmp/uwsm" \
+     && meson setup "$tmp/uwsm/build" "$tmp/uwsm" --prefix=/usr -Duuctl=disabled -Dfumon=disabled -Duwsm-app=enabled \
+     && meson install -C "$tmp/uwsm/build"; then
+    echo "uwsm ${UWSM_VERSION}: ok"
+  else
+    echo "AVISO: uwsm não foi instalado (a sessão usa Hyprland direto)"
+  fi
+  rm -rf "$tmp"
+  # shellcheck disable=SC2086
+  dnf -y remove $build_deps || true
+fi
+
 # ---------------------------------------------------------------- fontes
 log "Fontes Geist e Geist Mono"
 GEIST_VERSION="v1.9.2"
