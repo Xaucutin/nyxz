@@ -1,0 +1,14 @@
+[Unit]
+Description=Nyxz: baixar a atualização do sistema (aplica só no próximo boot)
+Documentation=https://github.com/Xaucutin/nyxz
+Wants=network-online.target
+After=network-online.target
+ConditionACPower=true
+
+[Service]
+Type=oneshot
+# Só baixa e prepara a nova versão. Nunca reinicia o PC sozinho
+# (o bootc-fetch-apply-updates.timer padrão reinicia, por isso fica desligado).
+ExecStart=/usr/bin/bootc upgrade --quiet
+Nice=19
+IOSchedulingClass=idle

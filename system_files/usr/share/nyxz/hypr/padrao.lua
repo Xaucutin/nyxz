@@ -138,6 +138,20 @@ hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO
 hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),     { locked = true })
 hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),   { locked = true })
 
+----------------------------------------
+---- AJUSTES FEITOS PELAS CONFIGURAÇÕES ----
+----------------------------------------
+-- Gerados pelas telas de Configurações (Telas, Teclado e mouse). Ficam depois dos
+-- padrões e antes do user.lua, que sempre tem a palavra final.
+local home = os.getenv("HOME") or ""
+for _, nome in ipairs({ "telas", "entrada" }) do
+    local caminho = home .. "/.config/hypr/nyxz/" .. nome .. ".lua"
+    local ok, err = pcall(dofile, caminho)
+    if not ok and not tostring(err):find("No such file") then
+        print("[nyxz] erro em " .. caminho .. ": " .. tostring(err))
+    end
+end
+
 -----------------------
 ---- INICIALIZAÇÃO ----
 -----------------------

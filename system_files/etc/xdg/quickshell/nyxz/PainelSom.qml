@@ -25,6 +25,9 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "nyxz-som"
+    // Recebe o teclado enquanto aberto, para o Esc fechar (sem isso o painel
+    // prendia o teclado até um clique fora).
+    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     readonly property var saidas: Pipewire.nodes.values.filter(n => n.audio && n.isSink && !n.isStream)
     readonly property var apps: Pipewire.nodes.values.filter(n => n.audio && n.isStream && n.isSink)
@@ -52,6 +55,8 @@ PanelWindow {
         color: Tema.painel
         border.color: Tema.bordaPainel
         border.width: 1
+        focus: painel.visible
+        Keys.onEscapePressed: Estado.somAberto = false
 
         ColumnLayout {
             id: coluna

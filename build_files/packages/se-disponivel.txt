@@ -34,3 +34,7 @@ adwaita-icon-theme
 
 # Ferramentas de diagnóstico leves
 vulkan-tools
+# lspci: identificar a placa de vídeo na tela Sobre
+pciutils
+# notify-send: notificações a partir de scripts da Nyxz
+libnotify

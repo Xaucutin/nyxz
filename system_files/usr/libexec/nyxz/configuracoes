@@ -1,0 +1,16 @@
+#!/usr/bin/bash
+# Abre as Configurações da Nyxz, opcionalmente numa página:
+#   configuracoes [rede|som|telas|teclado|atualizacoes|sobre]
+# Se já estiver aberta, só troca de página.
+pagina="${1:-}"
+if qs -c nyxz-config ipc show >/dev/null 2>&1; then
+  [ -n "$pagina" ] && qs -c nyxz-config ipc call config abrir "$pagina"
+  exit 0
+fi
+if systemd-detect-virt --quiet 2>/dev/null; then
+  export QT_QUICK_BACKEND=software
+fi
+if [ -n "$pagina" ]; then
+  ( sleep 1.5; qs -c nyxz-config ipc call config abrir "$pagina" >/dev/null 2>&1 ) &
+fi
+exec qs -c nyxz-config

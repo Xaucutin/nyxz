@@ -26,6 +26,7 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "nyxz-menu"
+    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     HyprlandFocusGrab {
         windows: [menu]
@@ -50,6 +51,8 @@ PanelWindow {
         color: "#111116"
         border.color: "#25252C"
         border.width: 1
+        focus: menu.visible
+        Keys.onEscapePressed: Estado.menuAberto = false
 
         ColumnLayout {
             id: coluna

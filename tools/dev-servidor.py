@@ -37,6 +37,11 @@ ROTAS = {
         (SHELL, lambda r: r == "Tema.qml" or r.startswith("icones/")),
         (LOGIN, lambda r: True),
     ]),
+    # Configurações: os arquivos dela + Tema.qml, Deslizante.qml e icones/
+    "/config.tgz": lambda: empacotar([
+        (SHELL, lambda r: r in ("Tema.qml", "Deslizante.qml") or r.startswith("icones/")),
+        (SHELL.parent / "nyxz-config", lambda r: True),
+    ]),
 }
 
 

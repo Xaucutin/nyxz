@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Configurações
+GenericName=Configurações do sistema
+Comment=Rede, som, telas, teclado, atualizações e informações do sistema
+Exec=/usr/libexec/nyxz/configuracoes
+Icon=preferences-system
+Categories=Settings;System;
+Keywords=config;ajustes;wifi;rede;internet;som;audio;tela;monitor;resolucao;hz;teclado;mouse;atualizar;atualizacao;sobre;ram;memoria;

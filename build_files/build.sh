@@ -126,12 +126,21 @@ echo "${NYXZ_VERSION}" > /usr/share/nyxz/versao
 # A tela de login usa o mesmo tema e os mesmos ícones do shell principal.
 ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-login/Tema.qml
 ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-login/icones
+# As Configurações também usam o tema, o controle deslizante e os ícones.
+ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-config/Tema.qml
+ln -sf ../nyxz/Deslizante.qml /etc/xdg/quickshell/nyxz-config/Deslizante.qml
+ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-config/icones
 
 # ---------------------------------------------------------------- serviços
 log "Serviços"
 chmod 0755 /usr/bin/nyx /usr/libexec/nyxz/*
 systemctl set-default graphical.target
 systemctl enable greetd.service
+# Atualizações: o timer padrão do bootc instala e REINICIA o PC sozinho. A Nyxz só
+# baixa em segundo plano e aplica no próximo boot que o usuário fizer.
+systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
+systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
+systemctl enable nyxz-atualizar.timer
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
 # vêm pela imagem nova, não por dnf.
 sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/_copr_*.repo 2>/dev/null || true
