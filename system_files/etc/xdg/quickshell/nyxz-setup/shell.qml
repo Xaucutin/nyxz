@@ -69,7 +69,12 @@ ShellRoot {
         else if (etapa === 1) escolherPerfil("sugerido");
         else if (etapa === 2) etapa = 3;
         else if (etapa === 3) instalar();
-        else if (etapa === 4 && executor.terminou) { concluir(); Qt.quit(); }
+        // Enter faz o mesmo que o botão em destaque: reiniciar, quando há apps nativos novos.
+        else if (etapa === 4 && executor.terminou) {
+            concluir();
+            if (executor.precisaReiniciar) Quickshell.execDetached(["systemctl", "reboot"]);
+            else Qt.quit();
+        }
     }
 
     function voltar() {

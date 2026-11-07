@@ -8,6 +8,14 @@
 # Configuração da Nyxz no lugar certo (o Hyprland 0.57 só aceita Lua).
 /usr/libexec/nyxz/hypr-config
 
+# VirtualBox/VMware (placa vmwgfx): apps GTK4 com OpenGL acelerado (ex.: Ghostty)
+# são desconectados pelo Hyprland ("Error flushing display: Broken pipe"). Nessas
+# VMs o OpenGL dos apps vai por software. No PC real nada muda. O uwsm leva esta
+# variável para todos os apps da sessão.
+case "$(systemd-detect-virt 2>/dev/null)" in
+  oracle|vmware) export LIBGL_ALWAYS_SOFTWARE=1 ;;
+esac
+
 hyprland_cmd="Hyprland"
 command -v start-hyprland >/dev/null 2>&1 && hyprland_cmd="start-hyprland"
 
