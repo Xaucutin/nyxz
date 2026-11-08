@@ -21,6 +21,8 @@ Scope {
         const m = f.message || "";
         if (m.indexOf("/usr/libexec/nyxz/componentes") >= 0) return "Instalar ou remover apps do sistema";
         if (m.indexOf("/usr/libexec/nyxz/atualizar") >= 0) return "Atualizar o sistema";
+        if (m.indexOf("/usr/libexec/nyxz/nyxz-dev-root") >= 0) return "Registrar domínios .test";
+        if (m.indexOf("sshd") >= 0) return "Servidor SSH deste computador";
         if (f.actionId.indexOf("org.freedesktop.timedate1") === 0) return "Mudar data e hora";
         if (f.actionId.indexOf("org.freedesktop.NetworkManager") === 0) return "Mudar a rede";
         return "Permissão de administrador";
@@ -36,6 +38,8 @@ Scope {
             return "A Nyxz vai montar a versão do sistema com os apps nativos que você escolheu.";
         if (m.indexOf("/usr/libexec/nyxz/atualizar") >= 0)
             return "A Nyxz vai baixar a versão nova do sistema. Ela entra no próximo boot.";
+        if (m.indexOf("/usr/libexec/nyxz/nyxz-dev-root") >= 0)
+            return "O Dev Hub vai apontar os nomes .test para este computador e, na primeira vez, confiar na autoridade de certificados local.";
         const exec = /^Authentication is needed to run `(.+)' as the super user$/.exec(m);
         if (exec) return "Um programa pediu para rodar como administrador:\n" + exec[1];
         if (/time ?zone/i.test(m)) return "Um programa quer mudar o fuso horário do sistema.";

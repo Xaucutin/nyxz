@@ -61,7 +61,9 @@ Também feitos e conferidos na VM (imagem bb2a50c): **SSH** no Dev Hub (servidor
 
 Também feito: **Discord Studio** no Dev Hub. "Bots do Discord" cria projetos em discord.js ou discord.py (`~/Projetos/Discord/<nome>`, com /ping e /exemplo), guarda o token no cofre (nunca em arquivo do projeto), roda como serviço do usuário com logs ao vivo e reinicia ao salvar; "Embeds" é um editor com prévia no visual do Discord, JSON editável nos dois sentidos, cópia para discord.js/discord.py e envio de teste por webhook. Conferido na VM: bot criado, `npm install` automático, token do cofre chegando ao bot (TokenInvalid com token de mentira) e reinício ao salvar; editor de embeds com a prévia certa.
 
-**Próximos da Fase 4:** domínios `.test` com HTTPS, túnel público, sessões de projeto (com o cofre injetando as variáveis) e limpeza de disco para dev.
+Também feitos e conferidos na VM (imagem 00d28fa): **domínios `.test` com HTTPS** (`loja.test` → `localhost:3000`, certificado do mkcert aceito pelo sistema sem avisos, Caddy na conta do usuário só enquanto há domínios ligados, senha pedida para registrar o nome) e **túnel público** (link `*.trycloudflare.com` acessado de fora pela internet; ao fechar, o link para de responder).
+
+**Próximos da Fase 4:** sessões de projeto (com o cofre injetando as variáveis) e limpeza de disco para dev.
 
 ## Ferramentas de desenvolvimento
 
