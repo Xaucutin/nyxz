@@ -38,9 +38,9 @@ Testado na VM (perfil Sugerido, 11 itens): Brave, Discord, Spotify, Vesktop e Pr
 
 **Pendentes da Fase 2:**
 - Confirmar na VM o Ghostty abrindo com `LIBGL_ALWAYS_SOFTWARE` (só em VirtualBox/VMware) e o caminho de atualização com imagem local (Configurações → Atualizações → reconstrói sobre a base nova).
-- Janela de senha de administrador no estilo da Nyxz (hoje é o mate-polkit, claro e em inglês).
 - A camada de apps nativos ficou com 3,6 GB; ver o que puxa tanto (Steam 32 bits, dependências KDE do Dolphin).
-- Serviços nyxz-scoped, nyxz-audio e nyxz-netd; Baloo desligado no Dolphin; Spicetify; linguagens pelo mise.
+- Feitos e ainda não conferidos na VM: janela de senha própria (polkit no shell), Spicetify, linguagens pelo mise, Baloo desligado, `nyxz-scoped` (apps, janelas e jogos da Steam em `org.nyxz.Apps`), página Data e hora.
+- `nyxz-audio` vai para a Fase 3 e `nyxz-netd` para a Fase 5, junto das funções que usam cada um (ver ARQUITETURA.md).
 
 ## Ferramentas de desenvolvimento
 

@@ -267,16 +267,17 @@ Tudo entra na v1.0, mas construído em fases. **Cada fase termina com uma ISO qu
 **Regra que vale para todas as fases:** nada exige terminal. Uma função só conta como pronta quando tudo dela pode ser feito pela interface, e todo erro aparece como notificação explicada, com botão para resolver (ver PROJETO.md, "Regra: nada exige terminal").
 
 **Fase 2 — Fundações**
-- `nyxz-scoped`, `nyxz-audio`, `nyxz-netd`, catálogo YAML, imagem local personalizada, Nyxz Setup e "Apps e componentes".
+- `nyxz-scoped`, catálogo de componentes (JSON), imagem local personalizada, Nyxz Setup e "Apps e componentes", janela de senha própria, Spicetify e linguagens pelo `mise`.
+- **Decisão (07/11/2026):** o `nyxz-audio` e o `nyxz-netd` passam a ser construídos junto com a primeira função que usa cada um, para nascerem testáveis: `nyxz-audio` na Fase 3 (perfis de som e painel completo) e `nyxz-netd` na Fase 5 (bloqueio de internet e VPN por app). O catálogo ficou em um JSON único em vez de um YAML por componente: o Quickshell lê JSON direto, sem conversor.
 
 **Fase 3 — Interface completa**
-- Prévias, bandeja, mini player, Ajustes (mods), finalizar tarefa, espaços, regras de janela, cola de atalhos, brilho, luz azul, wallpapers, animações estilo Lenis, privacidade.
+- `nyxz-audio`. Prévias, bandeja, mini player, Ajustes (mods), finalizar tarefa, espaços, regras de janela, cola de atalhos, brilho, luz azul, wallpapers, animações estilo Lenis, privacidade.
 
 **Fase 4 — Desenvolvimento**
 - Dev Hub completo, VS Code, Git, linguagens, `.test`, túnel, cofre, sessões, portas, limpeza.
 
 **Fase 5 — Jogos e rede**
-- Steam e companhia, Modo jogo, replay, LACT, biblioteca, controles, macros, Sunshine, VPN/proxy/DNS, LAN virtual, Nyxz Share, Voz.
+- `nyxz-netd`. Steam e companhia, Modo jogo, replay, LACT, biblioteca, controles, macros, Sunshine, VPN/proxy/DNS, LAN virtual, Nyxz Share, Voz.
 
 **Fase 6 — Sistema**
 - Estatísticas, consumo, Discos, snapshots, backup, Sync, automações, congelar, modo streamer, Doctor, dual boot, várias instâncias.

@@ -83,6 +83,11 @@ def rodar(cmd, mostrar=False, parado=900):
     return p.wait(), ""
 
 
+def script(it, acao):
+    """Comando de um extra da conta do usuário: <script> <ação> [argumentos do catálogo]."""
+    return [it["script"], acao, *it.get("args", [])]
+
+
 def catalogo():
     return json.loads(CATALOGO.read_text(encoding="utf-8"))
 
@@ -117,7 +122,7 @@ def estado():
         if it["tipo"] == "flatpak":
             itens[it["id"]] = it["flatpak"] in fps
         elif it["tipo"] == "usuario":
-            codigo, _ = rodar([it["script"], "estado"])
+            codigo, _ = rodar(script(it, "estado"))
             itens[it["id"]] = codigo == 0
         else:
             codigo, _ = rodar(["rpm", "-q", *it["pacotes"]])
@@ -156,14 +161,14 @@ def usuario(instalar, remover):
             falhas.append(it["nome"])
     for it in extras:
         passo(f"Instalando {it['nome']}")
-        codigo, _ = rodar([it["script"], "instalar"], mostrar=True)
+        codigo, _ = rodar(script(it, "instalar"), mostrar=True)
         if codigo != 0:
             falhas.append(it["nome"])
     # Sem o Flatpak de que dependem, os extras saem junto (ex.: tirar o Spotify tira o Spicetify).
     for it in cat.values():
         if it["tipo"] == "usuario" and it["id"] not in remover \
                 and any(r in remover for r in it.get("requer", [])) \
-                and rodar([it["script"], "estado"])[0] == 0:
+                and rodar(script(it, "estado"))[0] == 0:
             remover.append(it["id"])
     # Remoção na ordem contrária: extras antes dos Flatpaks de que dependem.
     for tipo in ("usuario", "flatpak"):
@@ -173,7 +178,7 @@ def usuario(instalar, remover):
                 continue
             passo(f"Removendo {it['nome']}")
             if tipo == "usuario":
-                rodar([it["script"], "remover"], mostrar=True)
+                rodar(script(it, "remover"), mostrar=True)
             else:
                 rodar(["flatpak", "uninstall", "--user", "-y", "--noninteractive", it["flatpak"]], mostrar=True)
     if falhas:

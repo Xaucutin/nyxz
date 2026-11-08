@@ -9,7 +9,7 @@
     {
       "id": "dev",
       "nome": "Desenvolvimento",
-      "descricao": "Editor, Git e ferramentas para programar."
+      "descricao": "Editor, Git e linguagens (Node.js, Python e outras)."
     },
     {
       "id": "jogos",
@@ -126,6 +126,84 @@
       ],
       "padrao": true,
       "tamanho_mb": 60
+    },
+    {
+      "id": "node",
+      "categoria": "dev",
+      "nome": "Node.js (LTS)",
+      "descricao": "JavaScript e TypeScript; npm para React, Tailwind e o resto.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/linguagem",
+      "args": [
+        "node@lts"
+      ],
+      "padrao": true,
+      "tamanho_mb": 120
+    },
+    {
+      "id": "python",
+      "categoria": "dev",
+      "nome": "Python",
+      "descricao": "Versão estável mais recente, com pip.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/linguagem",
+      "args": [
+        "python@latest"
+      ],
+      "padrao": true,
+      "tamanho_mb": 110
+    },
+    {
+      "id": "bun",
+      "categoria": "dev",
+      "nome": "Bun",
+      "descricao": "Alternativa rápida ao Node.js.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/linguagem",
+      "args": [
+        "bun@latest"
+      ],
+      "padrao": false,
+      "tamanho_mb": 100
+    },
+    {
+      "id": "go",
+      "categoria": "dev",
+      "nome": "Go",
+      "descricao": "Linguagem Go.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/linguagem",
+      "args": [
+        "go@latest"
+      ],
+      "padrao": false,
+      "tamanho_mb": 250
+    },
+    {
+      "id": "rust",
+      "categoria": "dev",
+      "nome": "Rust",
+      "descricao": "Compilador e cargo.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/linguagem",
+      "args": [
+        "rust@stable"
+      ],
+      "padrao": false,
+      "tamanho_mb": 600
+    },
+    {
+      "id": "java",
+      "categoria": "dev",
+      "nome": "Java (JDK 21)",
+      "descricao": "Para programar em Java. O Prism Launcher já baixa o Java do Minecraft sozinho.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/linguagem",
+      "args": [
+        "java@temurin-21"
+      ],
+      "padrao": false,
+      "tamanho_mb": 200
     },
     {
       "id": "steam",

@@ -1,0 +1,46 @@
+#!/usr/bin/bash
+# Linguagens de programação pelo mise, na conta do usuário (sem senha de administrador).
+#   linguagem instalar <ferramenta@versão>   ex.: node@lts, python@3.13, java@temurin-21
+#   linguagem remover  <ferramenta@versão>
+#   linguagem estado   <ferramenta@versão>   sai com 0 se estiver instalada
+# Os comandos (node, python...) ficam disponíveis pelos "shims" do mise, que estão no
+# PATH de toda sessão (/etc/profile.d/nyxz-mise.sh e environment.d).
+set -uo pipefail
+
+MISE="$HOME/.local/bin/mise"
+alvo="${2:-}"
+ferramenta="${alvo%@*}"
+export MISE_YES=1
+
+garantir_mise() {
+  [ -x "$MISE" ] && return 0
+  echo "Baixando o mise (gerenciador de linguagens)"
+  url="$(curl -fsSL https://api.github.com/repos/jdx/mise/releases/latest \
+    | python3 -I -c 'import json,sys; print(next(a["browser_download_url"] for a in json.load(sys.stdin)["assets"] if a["name"].endswith("-linux-x64")))')" \
+    || { echo "Não foi possível achar a versão mais nova do mise." >&2; return 1; }
+  mkdir -p "$(dirname "$MISE")"
+  curl -fsSL "$url" -o "$MISE.baixando" && chmod +x "$MISE.baixando" && mv "$MISE.baixando" "$MISE" \
+    || { echo "O download do mise falhou." >&2; return 1; }
+}
+
+[ -n "$ferramenta" ] || { echo "Uso: linguagem instalar|remover|estado <ferramenta@versão>" >&2; exit 2; }
+
+case "${1:-}" in
+  instalar)
+    garantir_mise || exit 1
+    echo "Instalando $alvo"
+    "$MISE" use --global "$alvo" 2>&1
+    ;;
+  remover)
+    [ -x "$MISE" ] || exit 0
+    "$MISE" unuse --global "$ferramenta" 2>&1
+    "$MISE" uninstall --all "$ferramenta" 2>&1 || true
+    ;;
+  estado)
+    [ -x "$MISE" ] && "$MISE" where "$ferramenta" >/dev/null 2>&1
+    ;;
+  *)
+    echo "Uso: linguagem instalar|remover|estado <ferramenta@versão>" >&2
+    exit 2
+    ;;
+esac
