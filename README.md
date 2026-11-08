@@ -36,10 +36,11 @@ Distro Linux pessoal focada em programação e jogos: Hyprland com interface pr�
 
 Testado na VM (perfil Sugerido, 11 itens): Brave, Discord, Spotify, Vesktop e Prism instalados por Flatpak; Ghostty, VS Code, Steam, Dolphin, Git/gh e GameMode/MangoHud na imagem local, montada com podman e ativada no boot seguinte. **RAM depois do login continua em 683 MB** (os apps não pesam parados). Disco: 17 de 38 GB.
 
+**Conferido na VM depois (imagem 9ed4520):** janela de senha própria em português (senha errada avisa e deixa tentar de novo), `nyxz-scoped` rodando com 4 MB e listando apps e janelas, Node.js e Python pelo mise, página Data e hora, relógio em Brasília, sistema em pt_BR (a base não tinha o pacote de português; instalações antigas são ajustadas sozinhas no boot), sem o aviso amarelo. **RAM depois do login: 675 MB.**
+
 **Pendentes da Fase 2:**
-- Confirmar na VM o Ghostty abrindo com `LIBGL_ALWAYS_SOFTWARE` (só em VirtualBox/VMware) e o caminho de atualização com imagem local (Configurações → Atualizações → reconstrói sobre a base nova).
+- Ainda não conferidos na VM: Spicetify (precisa do Spotify instalado), Ghostty com `LIBGL_ALWAYS_SOFTWARE` (o snapshot de teste não tem o Ghostty) e a separação de jogos da Steam em escopo próprio (precisa de um jogo).
 - A camada de apps nativos ficou com 3,6 GB; ver o que puxa tanto (Steam 32 bits, dependências KDE do Dolphin).
-- Feitos e ainda não conferidos na VM: janela de senha própria (polkit no shell), Spicetify, linguagens pelo mise, Baloo desligado, `nyxz-scoped` (apps, janelas e jogos da Steam em `org.nyxz.Apps`), página Data e hora.
 - `nyxz-audio` vai para a Fase 3 e `nyxz-netd` para a Fase 5, junto das funções que usam cada um (ver ARQUITETURA.md).
 
 ## Ferramentas de desenvolvimento
