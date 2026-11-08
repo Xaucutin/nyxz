@@ -26,6 +26,23 @@ Scope {
         return "Permissão de administrador";
     }
 
+    // O polkit manda a mensagem no idioma do serviço do sistema (inglês). As mais
+    // comuns são reescritas em português; as outras aparecem como vieram.
+    function detalhe() {
+        const f = raiz.fluxo;
+        if (!f) return "";
+        const m = f.message || "";
+        if (m.indexOf("/usr/libexec/nyxz/componentes") >= 0)
+            return "A Nyxz vai montar a versão do sistema com os apps nativos que você escolheu.";
+        if (m.indexOf("/usr/libexec/nyxz/atualizar") >= 0)
+            return "A Nyxz vai baixar a versão nova do sistema. Ela entra no próximo boot.";
+        const exec = /^Authentication is needed to run `(.+)' as the super user$/.exec(m);
+        if (exec) return "Um programa pediu para rodar como administrador:\n" + exec[1];
+        if (/time ?zone/i.test(m)) return "Um programa quer mudar o fuso horário do sistema.";
+        if (/system time/i.test(m)) return "Um programa quer mudar a data e a hora do sistema.";
+        return m;
+    }
+
     PanelWindow {
         id: janela
         visible: agente.isActive && raiz.fluxo !== null
@@ -89,7 +106,7 @@ Scope {
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: raiz.fluxo ? raiz.fluxo.message : ""
+                    text: raiz.detalhe()
                     wrapMode: Text.Wrap
                     maximumLineCount: 4
                     elide: Text.ElideRight

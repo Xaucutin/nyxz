@@ -45,3 +45,5 @@ google-noto-sans-fonts
 google-noto-color-emoji-fonts
 python3
 unzip
+# Linguagens pelo mise: os binários oficiais do Node.js precisam desta biblioteca
+libatomic

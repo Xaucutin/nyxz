@@ -41,7 +41,8 @@ case "${1:-ajuda}" in
       rm -rf "$tmp"
       echo "Shell de desenvolvimento atualizado."
     fi
-    pkill -x quickshell 2>/dev/null; pkill -x qs 2>/dev/null; sleep 0.3
+    # Fecha só o shell principal (as Configurações e o login são "qs -c nyxz-…").
+    pkill -x -f 'qs -c nyxz' 2>/dev/null; pkill -x -f 'quickshell -c nyxz' 2>/dev/null; sleep 0.5
     setsid -f nyx run /usr/libexec/nyxz/shell >/dev/null 2>&1
     ;;
   versao|version|--version)
