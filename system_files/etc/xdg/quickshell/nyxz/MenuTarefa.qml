@@ -14,11 +14,13 @@ PanelWindow {
     visible: Estado.menuAberto && alvo !== null
     anchors {
         left: true
-        bottom: true
+        top: Ajustes.barraEmCima
+        bottom: !Ajustes.barraEmCima
     }
     margins {
         left: Math.max(10, Estado.menuX)
-        bottom: 58
+        top: Ajustes.barraEmCima ? 58 : 0
+        bottom: Ajustes.barraEmCima ? 0 : 58
     }
     implicitWidth: 230
     implicitHeight: coluna.implicitHeight + 10

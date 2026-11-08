@@ -25,13 +25,20 @@ Scope {
     PanelWindow {
         id: janela
         visible: servidor.trackedNotifications.values.length > 0
+        // Ajuste "canto das notificações": superior-direito, superior-esquerdo,
+        // inferior-direito ou inferior-esquerdo.
+        readonly property string canto: Ajustes.cantoNotificacoes
         anchors {
-            top: true
-            right: true
+            top: canto.indexOf("superior") === 0
+            bottom: canto.indexOf("inferior") === 0
+            right: canto.indexOf("direito") > 0
+            left: canto.indexOf("esquerdo") > 0
         }
         margins {
             top: 10
+            bottom: 10
             right: 10
+            left: 10
         }
         implicitWidth: 340
         implicitHeight: coluna.implicitHeight

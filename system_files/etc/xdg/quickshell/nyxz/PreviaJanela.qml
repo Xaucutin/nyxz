@@ -12,6 +12,8 @@ PopupWindow {
     property var toplevel: null   // janela (Toplevel do ToplevelManager)
     property Item alvo: null      // botão da barra embaixo da prévia
     property int atrasoAbrir: 0   // ms (Ajustes; padrão 0 = na hora)
+    // Desenho por software (o /usr/libexec/nyxz/shell liga isso em máquinas virtuais)
+    readonly property bool leve: Quickshell.env("QT_QUICK_BACKEND") === "software"
 
     function mostrar(t, item) {
         fechar.stop();
@@ -30,10 +32,12 @@ PopupWindow {
     Timer { id: fechar; interval: 180; onTriggered: if (!areaPrevia.containsMouse) previa.exibir = false }
 
     visible: exibir && toplevel !== null && alvo !== null
+    property bool emCima: false   // barra no topo: a prévia abre para baixo
     anchor.item: alvo
-    anchor.edges: Edges.Top
-    anchor.gravity: Edges.Top
-    anchor.margins.top: -8
+    anchor.edges: emCima ? Edges.Bottom : Edges.Top
+    anchor.gravity: emCima ? Edges.Bottom : Edges.Top
+    anchor.margins.top: emCima ? 0 : -8
+    anchor.margins.bottom: emCima ? -8 : 0
     implicitWidth: 264
     implicitHeight: coluna.implicitHeight + 20
     color: "transparent"
@@ -83,8 +87,17 @@ PopupWindow {
                     id: captura
                     anchors.horizontalCenter: parent.horizontalCenter
                     captureSource: previa.visible ? previa.toplevel : null
-                    live: previa.visible
+                    // Com placa de vídeo: ao vivo. Desenhando por software (VMs), o ao vivo
+                    // tomava o processador inteiro: aí atualiza 2x por segundo.
+                    live: previa.visible && !previa.leve
                     constraintSize: Qt.size(244, 150)
+                }
+                Timer {
+                    interval: 500
+                    repeat: true
+                    triggeredOnStart: true
+                    running: previa.visible && previa.leve
+                    onTriggered: captura.captureFrame()
                 }
             }
         }

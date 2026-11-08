@@ -10,6 +10,7 @@ Singleton {
     property bool buscaAberta: false
     property bool somAberto: false
     property bool rapidoAberto: false
+    property bool atalhosAberto: false
 
     // Menu do botão direito de um app na barra
     property var menuToplevel: null
@@ -20,6 +21,7 @@ Singleton {
         buscaAberta = false;
         somAberto = false;
         rapidoAberto = false;
+        atalhosAberto = false;
         menuAberto = false;
     }
 
@@ -49,6 +51,7 @@ Singleton {
     ]
     function tituloLimpo(t) {
         let s = t || "";
+        if (!Ajustes.titulosLimpos) return s;
         for (const r of sufixos) s = s.replace(r, "");
         return s;
     }

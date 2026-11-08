@@ -11,15 +11,18 @@ import Quickshell.Services.Pipewire
 PanelWindow {
     id: barra
 
+    // Ajuste "barra em cima ou embaixo"
     anchors {
         left: true
         right: true
-        bottom: true
+        top: Ajustes.barraEmCima
+        bottom: !Ajustes.barraEmCima
     }
     margins {
         left: 10
         right: 10
-        bottom: 10
+        top: Ajustes.barraEmCima ? 10 : 0
+        bottom: Ajustes.barraEmCima ? 0 : 10
     }
     implicitHeight: 40
     exclusiveZone: 40
@@ -30,7 +33,7 @@ PanelWindow {
         objects: [Pipewire.defaultAudioSink]
     }
 
-    PreviaJanela { id: previa }
+    PreviaJanela { id: previa; atrasoAbrir: Ajustes.atrasoPrevia; emCima: Ajustes.barraEmCima }
 
     Rectangle {
         anchors.fill: parent
@@ -143,6 +146,11 @@ PanelWindow {
                         IconImage {
                             anchors.centerIn: parent
                             implicitSize: 19
+                            // Ajuste "ícones crescem sob o mouse" (discreto)
+                            scale: Ajustes.iconesCrescem && areaTarefa.containsMouse ? 1.16 : 1
+                            Behavior on scale {
+                                NumberAnimation { duration: Tema.medio; easing.type: Easing.BezierSpline; easing.bezierCurve: Tema.curva }
+                            }
                             source: Quickshell.iconPath(tarefa.entrada ? tarefa.entrada.icon : tarefa.modelData.appId, "application-x-executable")
                         }
                         Rectangle {
@@ -162,7 +170,7 @@ PanelWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                            onEntered: if (!Estado.menuAberto) previa.mostrar(tarefa.modelData, tarefa)
+                            onEntered: if (!Estado.menuAberto && Ajustes.previa) previa.mostrar(tarefa.modelData, tarefa)
                             onExited: previa.agendarFechar()
                             onClicked: mouse => {
                                 previa.esconder();
@@ -185,6 +193,7 @@ PanelWindow {
 
             // ---------------------------------------------- mini player (só com mídia)
             MiniPlayer {
+                visible: Ajustes.miniPlayer && temPlayer
                 Layout.leftMargin: 8
             }
 
@@ -192,6 +201,7 @@ PanelWindow {
 
             // ---------------------------------------------- privacidade (só em uso)
             Privacidade {
+                visible: Ajustes.privacidade && ativo
                 Layout.rightMargin: 6
             }
 
@@ -308,6 +318,7 @@ PanelWindow {
                     }
                     // Rolar a roda do mouse muda o volume (mod "Taskbar Volume Control")
                     onWheel: wheel => {
+                        if (!Ajustes.volumeNaRoda) return;
                         const s = Pipewire.defaultAudioSink;
                         if (!s || !s.audio) return;
                         const passo = wheel.angleDelta.y > 0 ? 0.05 : -0.05;

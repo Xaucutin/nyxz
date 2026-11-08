@@ -13,11 +13,13 @@ PanelWindow {
     visible: Estado.somAberto
     anchors {
         right: true
-        bottom: true
+        top: Ajustes.barraEmCima
+        bottom: !Ajustes.barraEmCima
     }
     margins {
         right: 10
-        bottom: 58
+        top: Ajustes.barraEmCima ? 58 : 0
+        bottom: Ajustes.barraEmCima ? 0 : 58
     }
     implicitWidth: 380
     implicitHeight: coluna.implicitHeight + 28

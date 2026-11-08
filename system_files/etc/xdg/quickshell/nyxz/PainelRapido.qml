@@ -13,8 +13,8 @@ PanelWindow {
     id: painel
 
     visible: Estado.rapidoAberto
-    anchors { right: true; bottom: true }
-    margins { right: 10; bottom: 58 }
+    anchors { right: true; top: Ajustes.barraEmCima; bottom: !Ajustes.barraEmCima }
+    margins { right: 10; top: Ajustes.barraEmCima ? 58 : 0; bottom: Ajustes.barraEmCima ? 0 : 58 }
     implicitWidth: 340
     implicitHeight: coluna.implicitHeight + 28
     exclusionMode: ExclusionMode.Ignore

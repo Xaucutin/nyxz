@@ -19,6 +19,7 @@ ShellRoot {
     Notificacoes {}
     PainelSom {}
     PainelRapido {}
+    ColaAtalhos {}
     MenuTarefa {}
 
     // Janela de senha de administrador (polkit). Fica num Loader: se o Quickshell
@@ -47,6 +48,15 @@ ShellRoot {
             const abrir = !Estado.buscaAberta;
             Estado.fecharTudo();
             Estado.buscaAberta = abrir;
+        }
+    }
+
+    IpcHandler {
+        target: "atalhos"
+        function alternar(): void {
+            const abrir = !Estado.atalhosAberto;
+            Estado.fecharTudo();
+            Estado.atalhosAberto = abrir;
         }
     }
 

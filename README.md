@@ -45,7 +45,11 @@ Testado na VM (perfil Sugerido, 11 itens): Brave, Discord, Spotify, Vesktop e Pr
 
 **Fase 3 — interface completa: em andamento.** Na barra: mini player (MPRIS), prévia ao vivo das janelas ao passar o mouse, indicador de privacidade (microfone, câmera, captura de tela) e painel rápido com brilho por tela (DDC/CI) e filtro de luz azul com horário. Papel de parede: imagem desenhada pelo shell (0 MB extra) ou vídeo pelo mpvpaper; página Configurações → Aparência com galeria; "Usar como papel de parede" no Dolphin; dois papéis de parede da Nyxz. Conferido na VM: prévia, painel rápido, Aparência e papel de parede de imagem. Falta conferir: mini player (precisa de um app de mídia), indicador de privacidade (precisa do pipewire-utils da próxima imagem), brilho real (a VM não tem DDC/CI) e vídeo de fundo (mpvpaper chega na próxima imagem).
 
-**Próximos da Fase 3:** Ajustes (os "mods" do Windhawk), cola de atalhos (Super + /), bandeja com fixar/ocultar, regras de janela, espaços com nome e o serviço `nyxz-audio` (perfis de som).
+Também feitos: **Ajustes** (Configurações → Ajustes, com busca: mini player, prévia e atraso, volume na roda, indicador de privacidade, barra em cima, ícones que crescem, títulos sem o nome do app, borda das janelas, tecla para mover janelas, canto das notificações) e **cola de atalhos** (Super + /, com busca). Conferido na VM: cola de atalhos e busca, barra em cima aplicada na hora, prévia abrindo para baixo e a página Ajustes abrindo.
+
+**Pendentes da Fase 3:** ver a página Ajustes inteira numa tela boa (na VM a 800×600 ela corta à direita: a janela de Configurações tem 900 px de largura natural); bandeja com fixar/ocultar; regras de janela; espaços com nome; serviço `nyxz-audio` (perfis de som).
+
+**Testes na VM:** com desenho por software, a prévia ao vivo tomava o processador e a digitação pelo VBoxManage embaralhava (agora ela atualiza 2x por segundo nesse caso). Voltar do tty para a sessão gráfica deixa a tela congelada no VirtualBox; para comandar a sessão a partir do tty, use `hyprctl -i 0 dispatch 'hl.dsp.exec_cmd("...")'`.
 
 ## Ferramentas de desenvolvimento
 

@@ -115,6 +115,10 @@ local mod = "SUPER"
 
 hl.bind(mod .. " + RETURN", hl.dsp.exec_cmd(terminal))
 hl.bind(mod .. " + SPACE",  hl.dsp.exec_cmd(lancador))
+-- Cola de atalhos: todos os atalhos, com busca
+tentar(function() hl.bind(mod .. " + slash", hl.dsp.exec_cmd("qs -c nyxz ipc call atalhos alternar")) end)
+-- Painel rápido (brilho e luz azul)
+tentar(function() hl.bind(mod .. " + B", hl.dsp.exec_cmd("qs -c nyxz ipc call rapido alternar")) end)
 hl.bind(mod .. " + Q",      hl.dsp.window.close())
 hl.bind(mod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mod .. " + SHIFT + E",
@@ -159,10 +163,10 @@ end)
 ----------------------------------------
 ---- AJUSTES FEITOS PELAS CONFIGURAÇÕES ----
 ----------------------------------------
--- Gerados pelas telas de Configurações (Telas, Teclado e mouse). Ficam depois dos
+-- Gerados pelas telas de Configurações (Telas, Teclado e mouse, Ajustes). Ficam depois dos
 -- padrões e antes do user.lua, que sempre tem a palavra final.
 local home = os.getenv("HOME") or ""
-for _, nome in ipairs({ "telas", "entrada" }) do
+for _, nome in ipairs({ "telas", "entrada", "ajustes" }) do
     local caminho = home .. "/.config/hypr/nyxz/" .. nome .. ".lua"
     local ok, err = pcall(dofile, caminho)
     if not ok and not tostring(err):find("No such file") then
