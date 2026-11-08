@@ -1,0 +1,7 @@
+[Unit]
+Description=Reaplica o Spicetify no Spotify (depois de atualizações do Spotify)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nyxz/extras/spicetify reaplicar
+Nice=10

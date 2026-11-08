@@ -116,6 +116,9 @@ def estado():
     for it in cat["itens"]:
         if it["tipo"] == "flatpak":
             itens[it["id"]] = it["flatpak"] in fps
+        elif it["tipo"] == "usuario":
+            codigo, _ = rodar([it["script"], "estado"])
+            itens[it["id"]] = codigo == 0
         else:
             codigo, _ = rodar(["rpm", "-q", *it["pacotes"]])
             itens[it["id"]] = codigo == 0
@@ -135,20 +138,44 @@ def usuario(instalar, remover):
     cat = {i["id"]: i for i in catalogo()["itens"]}
     rodar(["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", FLATHUB])
     falhas = []
-    for iid in instalar:
+    # Extras ("usuario") dependem de um Flatpak (ex.: Spicetify → Spotify): o que eles
+    # pedem entra na instalação e eles rodam depois dos Flatpaks.
+    for iid in list(instalar):
         it = cat.get(iid)
-        if not it or it["tipo"] != "flatpak":
-            continue
+        if it and it["tipo"] == "usuario":
+            for req in it.get("requer", []):
+                if req not in instalar and cat.get(req, {}).get("tipo") == "flatpak" \
+                        and cat[req]["flatpak"] not in flatpaks_instalados():
+                    instalar.insert(0, req)
+    flatpaks = [cat[i] for i in instalar if i in cat and cat[i]["tipo"] == "flatpak"]
+    extras = [cat[i] for i in instalar if i in cat and cat[i]["tipo"] == "usuario"]
+    for it in flatpaks:
         passo(f"Instalando {it['nome']}")
         codigo, _ = rodar(["flatpak", "install", "--user", "-y", "--noninteractive", "flathub", it["flatpak"]], mostrar=True)
         if codigo != 0:
             falhas.append(it["nome"])
-    for iid in remover:
-        it = cat.get(iid)
-        if not it or it["tipo"] != "flatpak":
-            continue
-        passo(f"Removendo {it['nome']}")
-        rodar(["flatpak", "uninstall", "--user", "-y", "--noninteractive", it["flatpak"]], mostrar=True)
+    for it in extras:
+        passo(f"Instalando {it['nome']}")
+        codigo, _ = rodar([it["script"], "instalar"], mostrar=True)
+        if codigo != 0:
+            falhas.append(it["nome"])
+    # Sem o Flatpak de que dependem, os extras saem junto (ex.: tirar o Spotify tira o Spicetify).
+    for it in cat.values():
+        if it["tipo"] == "usuario" and it["id"] not in remover \
+                and any(r in remover for r in it.get("requer", [])) \
+                and rodar([it["script"], "estado"])[0] == 0:
+            remover.append(it["id"])
+    # Remoção na ordem contrária: extras antes dos Flatpaks de que dependem.
+    for tipo in ("usuario", "flatpak"):
+        for iid in remover:
+            it = cat.get(iid)
+            if not it or it["tipo"] != tipo:
+                continue
+            passo(f"Removendo {it['nome']}")
+            if tipo == "usuario":
+                rodar([it["script"], "remover"], mostrar=True)
+            else:
+                rodar(["flatpak", "uninstall", "--user", "-y", "--noninteractive", it["flatpak"]], mostrar=True)
     if falhas:
         fim(False, "Não foi possível instalar: " + ", ".join(falhas))
     fim()

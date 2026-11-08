@@ -139,7 +139,7 @@ ColumnLayout {
 
                         Text {
                             Layout.alignment: Qt.AlignTop
-                            text: (linha.modelData.tipo === "rpm" ? "nativo" : "Flatpak") + " · " + linha.modelData.tamanho_mb + " MB"
+                            text: ({ rpm: "nativo", flatpak: "Flatpak", usuario: "extra" }[linha.modelData.tipo] || "") + " · " + linha.modelData.tamanho_mb + " MB"
                             font.family: Tema.fonteMono
                             font.pixelSize: 11
                             color: "#55535F"

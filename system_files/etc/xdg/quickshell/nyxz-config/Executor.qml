@@ -20,8 +20,10 @@ QtObject {
     function aplicar(catalogo, marcados, estado) {
         const itens = catalogo.itens;
         const instalados = estado ? estado.itens : {};
-        const instalar = itens.filter(i => i.tipo === "flatpak" && marcados[i.id] && !instalados[i.id]).map(i => i.id);
-        const remover = itens.filter(i => i.tipo === "flatpak" && !marcados[i.id] && instalados[i.id]).map(i => i.id);
+        // Flatpaks e extras da conta do usuário (ex.: Spicetify) vão no mesmo passo, sem senha.
+        const doUsuario = i => i.tipo === "flatpak" || i.tipo === "usuario";
+        const instalar = itens.filter(i => doUsuario(i) && marcados[i.id] && !instalados[i.id]).map(i => i.id);
+        const remover = itens.filter(i => doUsuario(i) && !marcados[i.id] && instalados[i.id]).map(i => i.id);
         const nativos = itens.filter(i => i.tipo === "rpm" && marcados[i.id]).map(i => i.id).sort();
         // Situação atual dos nativos: o que foi escolhido antes, ou o que está instalado.
         const antes = (estado && estado.escolhidosSistema && estado.escolhidosSistema.length

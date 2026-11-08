@@ -1,0 +1,65 @@
+#!/usr/bin/bash
+# Spicetify para o Spotify em Flatpak, na conta do usuário (sem senha de administrador).
+#   spicetify instalar   baixa o Spicetify, aponta para o Spotify do Flatpak e aplica
+#   spicetify reaplicar  reaplica depois que o Spotify atualiza (timer de usuário)
+#   spicetify remover    devolve o Spotify original e apaga o Spicetify
+#   spicetify estado     sai com 0 se estiver instalado
+set -uo pipefail
+
+PASTA="$HOME/.spicetify"
+BIN="$PASTA/spicetify"
+PREFS="$HOME/.var/app/com.spotify.Client/config/spotify/prefs"
+
+spotify_dir() {
+  for base in "$HOME/.local/share/flatpak" /var/lib/flatpak; do
+    d="$base/app/com.spotify.Client/x86_64/stable/active/files/extra/share/spotify"
+    [ -d "$d" ] && { echo "$d"; return 0; }
+  done
+  return 1
+}
+
+configurar() {
+  local dir
+  dir="$(spotify_dir)" || { echo "O Spotify (Flatpak) não está instalado." >&2; return 1; }
+  # O Spotify só cria o prefs ao abrir pela primeira vez; o Spicetify precisa do arquivo.
+  mkdir -p "$(dirname "$PREFS")"; [ -f "$PREFS" ] || : > "$PREFS"
+  "$BIN" config spotify_path "$dir" prefs_path "$PREFS" >/dev/null
+}
+
+aplicar() {
+  # Depois de uma atualização do Spotify, o backup antigo não serve mais: refaz.
+  "$BIN" -q backup apply 2>&1 || "$BIN" -q restore backup apply 2>&1
+}
+
+case "${1:-}" in
+  instalar)
+    echo "Baixando o Spicetify"
+    url="$(curl -fsSL https://api.github.com/repos/spicetify/cli/releases/latest \
+      | python3 -I -c 'import json,sys; print(next(a["browser_download_url"] for a in json.load(sys.stdin)["assets"] if a["name"].endswith("linux-amd64.tar.gz")))')" \
+      || { echo "Não foi possível achar a versão mais nova do Spicetify." >&2; exit 1; }
+    mkdir -p "$PASTA"
+    curl -fsSL "$url" | tar xz -C "$PASTA" || { echo "O download do Spicetify falhou." >&2; exit 1; }
+    chmod +x "$BIN"
+    configurar || exit 1
+    echo "Aplicando no Spotify"
+    aplicar || exit 1
+    systemctl --user enable --now nyxz-spicetify.timer >/dev/null 2>&1 || true
+    ;;
+  reaplicar)
+    [ -x "$BIN" ] || exit 0
+    configurar || exit 0
+    aplicar
+    ;;
+  remover)
+    systemctl --user disable --now nyxz-spicetify.timer >/dev/null 2>&1 || true
+    [ -x "$BIN" ] && "$BIN" -q restore 2>&1
+    rm -rf "$PASTA" "$HOME/.config/spicetify"
+    ;;
+  estado)
+    [ -x "$BIN" ]
+    ;;
+  *)
+    echo "Uso: spicetify instalar|reaplicar|remover|estado" >&2
+    exit 2
+    ;;
+esac

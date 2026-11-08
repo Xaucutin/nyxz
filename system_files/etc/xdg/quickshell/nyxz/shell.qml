@@ -19,6 +19,24 @@ ShellRoot {
     PainelSom {}
     MenuTarefa {}
 
+    // Janela de senha de administrador (polkit). Fica num Loader: se o Quickshell
+    // instalado não tiver o módulo de polkit, só ela falha, e o agente antigo
+    // (/usr/libexec/nyxz/polkit-agent) é ligado como reserva.
+    Loader {
+        id: senha
+        source: "AgenteSenha.qml"
+    }
+    Timer {
+        interval: 4000
+        running: true
+        onTriggered: {
+            if (senha.status !== Loader.Ready || !senha.item.registrado) {
+                console.warn("[nyxz] agente de senha próprio indisponível; usando o de reserva");
+                Quickshell.execDetached(["/usr/libexec/nyxz/polkit-agent"]);
+            }
+        }
+    }
+
     // Atalhos do Hyprland chamam estas funções:
     //   qs -c nyxz ipc call busca alternar
     IpcHandler {

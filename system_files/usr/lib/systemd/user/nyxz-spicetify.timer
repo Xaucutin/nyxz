@@ -1,0 +1,9 @@
+[Unit]
+Description=Confere o Spicetify depois do login e a cada 6 horas
+
+[Timer]
+OnStartupSec=2min
+OnUnitActiveSec=6h
+
+[Install]
+WantedBy=timers.target

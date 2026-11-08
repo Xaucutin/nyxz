@@ -144,7 +144,7 @@ done
 
 # ---------------------------------------------------------------- serviços
 log "Serviços"
-chmod 0755 /usr/bin/nyx /usr/libexec/nyxz/*
+chmod 0755 /usr/bin/nyx /usr/libexec/nyxz/* /usr/libexec/nyxz/extras/*
 systemctl set-default graphical.target
 systemctl enable greetd.service
 # Atualizações: o timer padrão do bootc instala e REINICIA o PC sozinho. A Nyxz só

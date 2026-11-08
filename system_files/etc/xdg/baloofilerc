@@ -1,0 +1,5 @@
+# Nyxz: o indexador do KDE (Baloo), que vem junto com o Dolphin, começa desligado.
+# Ele varre os arquivos em segundo plano e gasta CPU e RAM; a busca da Nyxz não
+# depende dele. Quem quiser pode ligar no próprio Dolphin (vale só para a sua conta).
+[Basic Settings]
+Indexing-Enabled=false

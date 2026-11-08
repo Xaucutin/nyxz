@@ -1,53 +1,241 @@
 {
   "versao": 1,
   "categorias": [
-    { "id": "area", "nome": "Área de trabalho", "descricao": "Navegador, terminal e gerenciador de arquivos." },
-    { "id": "dev", "nome": "Desenvolvimento", "descricao": "Editor, Git e ferramentas para programar." },
-    { "id": "jogos", "nome": "Jogos", "descricao": "Steam, Minecraft, Roblox e ferramentas de desempenho." },
-    { "id": "comunicacao", "nome": "Comunicação e mídia", "descricao": "Discord e Spotify." }
+    {
+      "id": "area",
+      "nome": "Área de trabalho",
+      "descricao": "Navegador, terminal e gerenciador de arquivos."
+    },
+    {
+      "id": "dev",
+      "nome": "Desenvolvimento",
+      "descricao": "Editor, Git e ferramentas para programar."
+    },
+    {
+      "id": "jogos",
+      "nome": "Jogos",
+      "descricao": "Steam, Minecraft, Roblox e ferramentas de desempenho."
+    },
+    {
+      "id": "comunicacao",
+      "nome": "Comunicação e mídia",
+      "descricao": "Discord e Spotify."
+    }
   ],
   "repositorios": {
     "vscode": "nyxz-vscode.repo",
     "ghostty": "_copr_scottames-ghostty.repo"
   },
   "itens": [
-    { "id": "brave", "categoria": "area", "nome": "Brave", "descricao": "Navegador (sugerido).",
-      "tipo": "flatpak", "flatpak": "com.brave.Browser", "padrao": true, "tamanho_mb": 350 },
-    { "id": "firefox", "categoria": "area", "nome": "Firefox", "descricao": "Navegador.",
-      "tipo": "flatpak", "flatpak": "org.mozilla.firefox", "padrao": false, "tamanho_mb": 300 },
-    { "id": "ghostty", "categoria": "area", "nome": "Ghostty", "descricao": "Terminal rápido (sugerido).",
-      "tipo": "rpm", "pacotes": ["ghostty"], "repos": ["ghostty"], "padrao": true, "tamanho_mb": 40 },
-    { "id": "kitty", "categoria": "area", "nome": "Kitty", "descricao": "Terminal.",
-      "tipo": "rpm", "pacotes": ["kitty"], "padrao": false, "tamanho_mb": 30 },
-    { "id": "dolphin", "categoria": "area", "nome": "Dolphin", "descricao": "Gerenciador de arquivos com abas, etiquetas e prévia (sugerido).",
-      "tipo": "rpm", "pacotes": ["dolphin"], "padrao": true, "tamanho_mb": 180 },
-    { "id": "thunar", "categoria": "area", "nome": "Thunar", "descricao": "Gerenciador de arquivos leve.",
-      "tipo": "rpm", "pacotes": ["Thunar"], "padrao": false, "tamanho_mb": 25 },
-
-    { "id": "vscode", "categoria": "dev", "nome": "Visual Studio Code", "descricao": "Editor de código, nativo (não Flatpak).",
-      "tipo": "rpm", "pacotes": ["code"], "repos": ["vscode"], "padrao": true, "tamanho_mb": 420 },
-    { "id": "git", "categoria": "dev", "nome": "Git e GitHub CLI", "descricao": "git, git-lfs e gh.",
-      "tipo": "rpm", "pacotes": ["git", "git-lfs", "gh"], "padrao": true, "tamanho_mb": 60 },
-
-    { "id": "steam", "categoria": "jogos", "nome": "Steam", "descricao": "Nativa, com as bibliotecas de 32 bits e o Vulkan para a sua placa.",
-      "tipo": "rpm", "pacotes": ["steam"], "padrao": true, "tamanho_mb": 500 },
-    { "id": "desempenho", "categoria": "jogos", "nome": "GameMode, MangoHud e gamescope", "descricao": "Desempenho máximo, contador de FPS e escala de resolução nos jogos.",
-      "tipo": "rpm", "pacotes": ["gamemode", "mangohud", "gamescope"], "padrao": true, "tamanho_mb": 30 },
-    { "id": "prism", "categoria": "jogos", "nome": "Prism Launcher", "descricao": "Minecraft com mods; escolhe o Java certo sozinho.",
-      "tipo": "flatpak", "flatpak": "org.prismlauncher.PrismLauncher", "padrao": true, "tamanho_mb": 250 },
-    { "id": "heroic", "categoria": "jogos", "nome": "Heroic", "descricao": "Jogos da Epic e da GOG.",
-      "tipo": "flatpak", "flatpak": "com.heroicgameslauncher.hgl", "padrao": false, "tamanho_mb": 400 },
-    { "id": "bottles", "categoria": "jogos", "nome": "Bottles", "descricao": "Programas do Windows.",
-      "tipo": "flatpak", "flatpak": "com.usebottles.bottles", "padrao": false, "tamanho_mb": 600 },
-    { "id": "sober", "categoria": "jogos", "nome": "Sober (Roblox)", "descricao": "Roda a versão Android do Roblox.",
+    {
+      "id": "brave",
+      "categoria": "area",
+      "nome": "Brave",
+      "descricao": "Navegador (sugerido).",
+      "tipo": "flatpak",
+      "flatpak": "com.brave.Browser",
+      "padrao": true,
+      "tamanho_mb": 350
+    },
+    {
+      "id": "firefox",
+      "categoria": "area",
+      "nome": "Firefox",
+      "descricao": "Navegador.",
+      "tipo": "flatpak",
+      "flatpak": "org.mozilla.firefox",
+      "padrao": false,
+      "tamanho_mb": 300
+    },
+    {
+      "id": "ghostty",
+      "categoria": "area",
+      "nome": "Ghostty",
+      "descricao": "Terminal rápido (sugerido).",
+      "tipo": "rpm",
+      "pacotes": [
+        "ghostty"
+      ],
+      "repos": [
+        "ghostty"
+      ],
+      "padrao": true,
+      "tamanho_mb": 40
+    },
+    {
+      "id": "kitty",
+      "categoria": "area",
+      "nome": "Kitty",
+      "descricao": "Terminal.",
+      "tipo": "rpm",
+      "pacotes": [
+        "kitty"
+      ],
+      "padrao": false,
+      "tamanho_mb": 30
+    },
+    {
+      "id": "dolphin",
+      "categoria": "area",
+      "nome": "Dolphin",
+      "descricao": "Gerenciador de arquivos com abas, etiquetas e prévia (sugerido).",
+      "tipo": "rpm",
+      "pacotes": [
+        "dolphin"
+      ],
+      "padrao": true,
+      "tamanho_mb": 180
+    },
+    {
+      "id": "thunar",
+      "categoria": "area",
+      "nome": "Thunar",
+      "descricao": "Gerenciador de arquivos leve.",
+      "tipo": "rpm",
+      "pacotes": [
+        "Thunar"
+      ],
+      "padrao": false,
+      "tamanho_mb": 25
+    },
+    {
+      "id": "vscode",
+      "categoria": "dev",
+      "nome": "Visual Studio Code",
+      "descricao": "Editor de código, nativo (não Flatpak).",
+      "tipo": "rpm",
+      "pacotes": [
+        "code"
+      ],
+      "repos": [
+        "vscode"
+      ],
+      "padrao": true,
+      "tamanho_mb": 420
+    },
+    {
+      "id": "git",
+      "categoria": "dev",
+      "nome": "Git e GitHub CLI",
+      "descricao": "git, git-lfs e gh.",
+      "tipo": "rpm",
+      "pacotes": [
+        "git",
+        "git-lfs",
+        "gh"
+      ],
+      "padrao": true,
+      "tamanho_mb": 60
+    },
+    {
+      "id": "steam",
+      "categoria": "jogos",
+      "nome": "Steam",
+      "descricao": "Nativa, com as bibliotecas de 32 bits e o Vulkan para a sua placa.",
+      "tipo": "rpm",
+      "pacotes": [
+        "steam"
+      ],
+      "padrao": true,
+      "tamanho_mb": 500
+    },
+    {
+      "id": "desempenho",
+      "categoria": "jogos",
+      "nome": "GameMode, MangoHud e gamescope",
+      "descricao": "Desempenho máximo, contador de FPS e escala de resolução nos jogos.",
+      "tipo": "rpm",
+      "pacotes": [
+        "gamemode",
+        "mangohud",
+        "gamescope"
+      ],
+      "padrao": true,
+      "tamanho_mb": 30
+    },
+    {
+      "id": "prism",
+      "categoria": "jogos",
+      "nome": "Prism Launcher",
+      "descricao": "Minecraft com mods; escolhe o Java certo sozinho.",
+      "tipo": "flatpak",
+      "flatpak": "org.prismlauncher.PrismLauncher",
+      "padrao": true,
+      "tamanho_mb": 250
+    },
+    {
+      "id": "heroic",
+      "categoria": "jogos",
+      "nome": "Heroic",
+      "descricao": "Jogos da Epic e da GOG.",
+      "tipo": "flatpak",
+      "flatpak": "com.heroicgameslauncher.hgl",
+      "padrao": false,
+      "tamanho_mb": 400
+    },
+    {
+      "id": "bottles",
+      "categoria": "jogos",
+      "nome": "Bottles",
+      "descricao": "Programas do Windows.",
+      "tipo": "flatpak",
+      "flatpak": "com.usebottles.bottles",
+      "padrao": false,
+      "tamanho_mb": 600
+    },
+    {
+      "id": "sober",
+      "categoria": "jogos",
+      "nome": "Sober (Roblox)",
+      "descricao": "Roda a versão Android do Roblox.",
       "aviso": "De terceiros e instável em 2026: pode parar de funcionar se o Roblox mudar algo.",
-      "tipo": "flatpak", "flatpak": "org.vinegarhq.Sober", "padrao": false, "tamanho_mb": 300 },
-
-    { "id": "vesktop", "categoria": "comunicacao", "nome": "Vesktop", "descricao": "Discord com Vencord, sempre na última versão.",
-      "tipo": "flatpak", "flatpak": "dev.vencord.Vesktop", "padrao": true, "tamanho_mb": 250 },
-    { "id": "discord", "categoria": "comunicacao", "nome": "Discord", "descricao": "Cliente oficial.",
-      "tipo": "flatpak", "flatpak": "com.discordapp.Discord", "padrao": true, "tamanho_mb": 300 },
-    { "id": "spotify", "categoria": "comunicacao", "nome": "Spotify", "descricao": "Música. O Spicetify chega numa próxima versão.",
-      "tipo": "flatpak", "flatpak": "com.spotify.Client", "padrao": true, "tamanho_mb": 300 }
+      "tipo": "flatpak",
+      "flatpak": "org.vinegarhq.Sober",
+      "padrao": false,
+      "tamanho_mb": 300
+    },
+    {
+      "id": "vesktop",
+      "categoria": "comunicacao",
+      "nome": "Vesktop",
+      "descricao": "Discord com Vencord, sempre na última versão.",
+      "tipo": "flatpak",
+      "flatpak": "dev.vencord.Vesktop",
+      "padrao": true,
+      "tamanho_mb": 250
+    },
+    {
+      "id": "discord",
+      "categoria": "comunicacao",
+      "nome": "Discord",
+      "descricao": "Cliente oficial.",
+      "tipo": "flatpak",
+      "flatpak": "com.discordapp.Discord",
+      "padrao": true,
+      "tamanho_mb": 300
+    },
+    {
+      "id": "spotify",
+      "categoria": "comunicacao",
+      "nome": "Spotify",
+      "descricao": "Música.",
+      "tipo": "flatpak",
+      "flatpak": "com.spotify.Client",
+      "padrao": true,
+      "tamanho_mb": 300
+    },
+    {
+      "id": "spicetify",
+      "categoria": "comunicacao",
+      "nome": "Spicetify",
+      "descricao": "Temas e extensões para o Spotify. Reaplicado sozinho quando o Spotify atualiza.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/spicetify",
+      "requer": [
+        "spotify"
+      ],
+      "padrao": true,
+      "tamanho_mb": 15
+    }
   ]
 }

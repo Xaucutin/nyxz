@@ -178,6 +178,6 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("nyx run /usr/libexec/nyxz/shell")
     -- Nyxz Setup no primeiro login (escolha de apps; nada é obrigatório)
     hl.exec_cmd("/usr/libexec/nyxz/setup-primeiro-login")
-    -- Agente de permissões (pede a senha quando um app precisa de administrador)
-    hl.exec_cmd("/usr/libexec/nyxz/polkit-agent")
+    -- A janela de senha de administrador agora é do próprio shell (AgenteSenha.qml);
+    -- o /usr/libexec/nyxz/polkit-agent só é ligado pelo shell se ela não carregar.
 end)
