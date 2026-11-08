@@ -14,6 +14,7 @@ ShellRoot {
         }
     }
 
+    PapelDeParede {}
     Busca {}
     Notificacoes {}
     PainelSom {}

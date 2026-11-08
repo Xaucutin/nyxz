@@ -30,6 +30,16 @@ case "${1:-ajuda}" in
     # Desenvolvimento: baixa o shell do PC hospedeiro (servidor em 10.0.2.2, a rede NAT
     # do VirtualBox) e reinicia o shell com ele. "nyx dev limpar" volta ao da imagem.
     destino="$HOME/.config/quickshell/nyxz"
+    if [ "${2:-}" = "usr" ]; then
+      # Scripts e dados novos de /usr sem esperar a imagem: o bootc usr-overlay deixa
+      # o /usr gravável só até o próximo boot (depois volta ao da imagem sozinho).
+      tmp="$(mktemp -d)"
+      curl -fsS "${NYXZ_DEV_URL_USR:-http://10.0.2.2/usr.tgz}" -o "$tmp/usr.tgz" || { echo "Servidor de desenvolvimento não respondeu." >&2; exit 1; }
+      pkexec sh -c "bootc usr-overlay >/dev/null 2>&1; tar xzf '$tmp/usr.tgz' --no-same-owner -C /usr" \
+        && echo "/usr atualizado até o próximo boot."
+      rm -rf "$tmp"
+      exit 0
+    fi
     if [ "${2:-}" = "limpar" ]; then
       rm -rf "$destino"
       echo "Shell de desenvolvimento removido; usando o da imagem."
@@ -42,7 +52,11 @@ case "${1:-ajuda}" in
       echo "Shell de desenvolvimento atualizado."
     fi
     # Fecha só o shell principal (as Configurações e o login são "qs -c nyxz-…").
-    pkill -x -f 'qs -c nyxz' 2>/dev/null; pkill -x -f 'quickshell -c nyxz' 2>/dev/null; sleep 0.5
+    # "|| true": sem isso o set -e encerrava o script quando o shell não estava rodando,
+    # antes de iniciá-lo de novo (a barra sumia).
+    pkill -x -f 'qs -c nyxz' 2>/dev/null || true
+    pkill -x -f 'quickshell -c nyxz' 2>/dev/null || true
+    sleep 0.5
     setsid -f nyx run /usr/libexec/nyxz/shell >/dev/null 2>&1
     ;;
   versao|version|--version)

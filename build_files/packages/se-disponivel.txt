@@ -45,3 +45,5 @@ pipewire-utils
 # Brilho: monitores externos pelo cabo (DDC/CI) e tela de notebook
 ddcutil
 brightnessctl
+# Vídeo como papel de parede (só roda com um vídeo definido)
+mpvpaper

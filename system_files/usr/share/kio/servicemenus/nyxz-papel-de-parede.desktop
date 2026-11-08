@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+MimeType=image/jpeg;image/png;image/webp;image/avif;image/bmp;video/mp4;video/webm;video/x-matroska;video/quicktime;image/gif;
+Actions=papelDeParede;
+X-KDE-Priority=TopLevel
+
+[Desktop Action papelDeParede]
+Name=Usar como papel de parede
+Icon=preferences-desktop-wallpaper
+Exec=/usr/libexec/nyxz/papel-de-parede definir %f

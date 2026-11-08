@@ -43,9 +43,14 @@ Testado na VM (perfil Sugerido, 11 itens): Brave, Discord, Spotify, Vesktop e Pr
 - A camada de apps nativos ficou com 3,6 GB; ver o que puxa tanto (Steam 32 bits, dependências KDE do Dolphin).
 - `nyxz-audio` vai para a Fase 3 e `nyxz-netd` para a Fase 5, junto das funções que usam cada um (ver ARQUITETURA.md).
 
+**Fase 3 — interface completa: em andamento.** Na barra: mini player (MPRIS), prévia ao vivo das janelas ao passar o mouse, indicador de privacidade (microfone, câmera, captura de tela) e painel rápido com brilho por tela (DDC/CI) e filtro de luz azul com horário. Papel de parede: imagem desenhada pelo shell (0 MB extra) ou vídeo pelo mpvpaper; página Configurações → Aparência com galeria; "Usar como papel de parede" no Dolphin; dois papéis de parede da Nyxz. Conferido na VM: prévia, painel rápido, Aparência e papel de parede de imagem. Falta conferir: mini player (precisa de um app de mídia), indicador de privacidade (precisa do pipewire-utils da próxima imagem), brilho real (a VM não tem DDC/CI) e vídeo de fundo (mpvpaper chega na próxima imagem).
+
+**Próximos da Fase 3:** Ajustes (os "mods" do Windhawk), cola de atalhos (Super + /), bandeja com fixar/ocultar, regras de janela, espaços com nome e o serviço `nyxz-audio` (perfis de som).
+
 ## Ferramentas de desenvolvimento
 
 - `tools/dev-servidor.py`: serve o shell, o login e as Configurações em `http://127.0.0.1/` (na VM: `10.0.2.2`). Na VM, `nyx dev` baixa o shell e reinicia; `nyx dev limpar` volta ao da imagem.
+- `nyx dev usr` (na VM): copia os scripts e dados de `/usr` do PC para um `/usr` temporário (`bootc usr-overlay`), que volta ao da imagem no próximo boot. Testa scripts sem esperar o build.
 - `tools/vm-digitar.ps1`: digita texto na VM `Nyxz-Teste` (teclado ABNT2) pelo VBoxManage.
 - VirtualBox no Windows: deixe o "cache de E/S do hospedeiro" ligado no controlador SATA (`VBoxManage storagectl <vm> --name SATA --hostiocache on`). Sem ele, com pouca RAM livre no PC, o disco virtual parou de responder (`AHCI#0: Port 0 reset` no VBox.log) e tudo na VM parecia travado.
 

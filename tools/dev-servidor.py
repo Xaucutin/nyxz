@@ -26,7 +26,13 @@ def empacotar(pastas) -> bytes:
             for arq in sorted(pasta.rglob("*")):
                 rel = str(arq.relative_to(pasta)).replace("\\", "/")
                 if arq.is_file() and filtro(rel):
-                    tar.add(arq, arcname=rel)
+                    info = tar.gettarinfo(arq, arcname=rel)
+                    # No Windows não há bit de execução: scripts e binários saem como 0755.
+                    info.mode = 0o755 if rel.startswith(("libexec/", "bin/")) else 0o644
+                    info.uid = info.gid = 0
+                    info.uname = info.gname = "root"
+                    with open(arq, "rb") as f:
+                        tar.addfile(info, f)
     return buf.getvalue()
 
 
@@ -47,6 +53,10 @@ ROTAS = {
         (SHELL, lambda r: r == "Tema.qml" or r.startswith("icones/")),
         (SHELL.parent / "nyxz-config", lambda r: r in ("Botao.qml", "ListaComponentes.qml", "Executor.qml", "Comando.qml")),
         (SHELL.parent / "nyxz-setup", lambda r: True),
+    ]),
+    # Scripts e dados de /usr (nyx dev usr): vão para um /usr temporário (bootc usr-overlay)
+    "/usr.tgz": lambda: empacotar([
+        (RAIZ / "system_files" / "usr", lambda r: r.startswith(("libexec/nyxz/", "share/nyxz/", "share/kio/", "bin/"))),
     ]),
 }
 

@@ -1,0 +1,89 @@
+#!/usr/bin/bash
+# Papel de parede da Nyxz.
+#   papel-de-parede definir <arquivo> [preencher|ajustar|centralizar]
+#   papel-de-parede remover          volta para a cor sólida da Nyxz
+#   papel-de-parede aplicar          no login: religa o vídeo, se for o caso
+#   papel-de-parede listar           JSON com imagens e vídeos das pastas do usuário
+#
+# Imagem: desenhada pelo próprio shell (sem processo extra).
+# Vídeo: mpvpaper, sem som, em loop, decodificado pela placa de vídeo e pausado
+# sozinho quando a área de trabalho está coberta (-p). Só existe enquanto houver
+# um vídeo definido.
+set -u
+CFG="$HOME/.config/nyxz/papel-de-parede.json"
+mkdir -p "$(dirname "$CFG")"
+
+eh_video() {
+  case "${1,,}" in *.mp4|*.webm|*.mkv|*.mov|*.gif) return 0 ;; esac
+  return 1
+}
+
+parar_video() { pkill -x mpvpaper 2>/dev/null; true; }
+
+iniciar_video() {
+  local arquivo="$1" ajuste="$2" encaixe="--panscan=1.0"
+  case "$ajuste" in
+    ajustar) encaixe="--panscan=0.0" ;;
+    centralizar) encaixe="--panscan=0.0 --video-unscaled=yes" ;;
+  esac
+  command -v mpvpaper >/dev/null || { echo "O mpvpaper não está instalado." >&2; return 1; }
+  parar_video
+  setsid -f nyx run mpvpaper -p -o "no-audio --loop-file=inf --hwdec=auto $encaixe --really-quiet" '*' "$arquivo" >/dev/null 2>&1
+}
+
+gravar() { # tipo arquivo ajuste
+  python3 -I -c 'import json,sys; json.dump({"tipo": sys.argv[1], "arquivo": sys.argv[2], "ajuste": sys.argv[3]}, open(sys.argv[4], "w"), ensure_ascii=False)' "$1" "$2" "$3" "$CFG"
+}
+
+case "${1:-}" in
+  definir)
+    arquivo="$(realpath -e "${2:-}" 2>/dev/null)" || { echo "Arquivo não encontrado." >&2; exit 1; }
+    ajuste="${3:-preencher}"
+    if eh_video "$arquivo"; then
+      gravar video "$arquivo" "$ajuste"
+      iniciar_video "$arquivo" "$ajuste"
+    else
+      parar_video
+      gravar imagem "$arquivo" "$ajuste"
+    fi
+    ;;
+  remover)
+    parar_video
+    gravar cor "" preencher
+    ;;
+  aplicar)
+    [ -f "$CFG" ] || exit 0
+    tipo="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("tipo",""), d.get("ajuste","preencher"), d.get("arquivo",""), sep="\n")' "$CFG")"
+    t="$(sed -n 1p <<<"$tipo")"; a="$(sed -n 2p <<<"$tipo")"; f="$(sed -n 3p <<<"$tipo")"
+    if [ "$t" = video ] && [ -f "$f" ]; then iniciar_video "$f" "$a"; else parar_video; fi
+    ;;
+  listar)
+    python3 -I - "$HOME" <<'PY'
+import json, os, sys
+casa = sys.argv[1]
+pastas = ["Imagens/Papéis de parede", "Imagens", "Pictures", "Vídeos", "Videos", "Downloads"]
+img = (".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp")
+vid = (".mp4", ".webm", ".mkv", ".mov", ".gif")
+vistos, itens = set(), []
+for pasta in ["/usr/share/nyxz/papeis-de-parede"] + [os.path.join(casa, p) for p in pastas]:
+    try:
+        nomes = sorted(os.listdir(pasta), key=str.lower)
+    except OSError:
+        continue
+    for nome in nomes:
+        caminho = os.path.join(pasta, nome)
+        ext = os.path.splitext(nome)[1].lower()
+        if caminho in vistos or not os.path.isfile(caminho) or ext not in img + vid:
+            continue
+        vistos.add(caminho)
+        itens.append({"arquivo": caminho, "nome": nome, "video": ext in vid})
+        if len(itens) >= 200:
+            break
+print(json.dumps(itens, ensure_ascii=False))
+PY
+    ;;
+  *)
+    echo "Uso: papel-de-parede definir <arquivo> [preencher|ajustar|centralizar] | remover | aplicar | listar" >&2
+    exit 2
+    ;;
+esac
