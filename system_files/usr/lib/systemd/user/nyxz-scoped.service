@@ -1,0 +1,17 @@
+[Unit]
+Description=Nyxz: acompanha apps, janelas e jogos (org.nyxz.Apps)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.nyxz.Apps
+ExecStart=/usr/libexec/nyxz/nyxz-scoped
+Restart=on-failure
+RestartSec=3
+# Serviço pequeno: não deve passar disso; se passar, é defeito.
+MemoryMax=32M
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target

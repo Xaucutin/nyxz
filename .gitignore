@@ -3,3 +3,4 @@ output/
 *.qcow2
 .DS_Store
 Thumbs.db
+servicos/*/target/

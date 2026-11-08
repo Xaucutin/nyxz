@@ -152,6 +152,8 @@ systemctl enable greetd.service
 systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl enable nyxz-atualizar.timer
+# Serviços de usuário da Nyxz: ligados para todos os usuários, sobem com a sessão gráfica.
+systemctl --global enable nyxz-scoped.service
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
 # vêm pela imagem nova, não por dnf.
 sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/_copr_*.repo 2>/dev/null || true
@@ -167,7 +169,7 @@ if [ -n "$faltando" ]; then
   echo "$faltando"
   exit 1
 fi
-for bin in Hyprland greetd foot; do
+for bin in Hyprland greetd foot /usr/libexec/nyxz/nyxz-scoped; do
   command -v "$bin" >/dev/null 2>&1 || { echo "ERRO: $bin não está no sistema"; exit 1; }
 done
 ls /usr/share/wayland-sessions/*.desktop >/dev/null 2>&1 || { echo "ERRO: nenhuma sessão Wayland instalada"; exit 1; }

@@ -1,0 +1,30 @@
+# Confere rápido se os serviços em Rust compilam (a imagem completa leva ~15 min).
+name: Serviços
+
+on:
+  push:
+    paths: ["servicos/**", ".github/workflows/servicos.yml"]
+  pull_request:
+    paths: ["servicos/**"]
+  workflow_dispatch:
+
+jobs:
+  compilar:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        servico: [nyxz-scoped]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            servicos/${{ matrix.servico }}/target
+          key: cargo-${{ matrix.servico }}-${{ hashFiles(format('servicos/{0}/Cargo.toml', matrix.servico)) }}
+      - name: Compilar
+        working-directory: servicos/${{ matrix.servico }}
+        run: cargo build --release
+      - name: Tamanho do binário
+        working-directory: servicos/${{ matrix.servico }}
+        run: ls -la target/release/${{ matrix.servico }}
