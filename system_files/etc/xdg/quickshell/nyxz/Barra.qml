@@ -205,48 +205,10 @@ PanelWindow {
                 Layout.rightMargin: 6
             }
 
-            // ---------------------------------------------- bandeja
-            Row {
-                spacing: 0
-                Repeater {
-                    model: SystemTray.items
-                    delegate: Item {
-                        id: itemBandeja
-                        required property var modelData
-                        width: 30
-                        height: 30
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 7
-                            color: areaBandeja.containsMouse ? Tema.hover : "transparent"
-                        }
-                        IconImage {
-                            anchors.centerIn: parent
-                            implicitSize: 16
-                            source: itemBandeja.modelData.icon
-                        }
-                        MouseArea {
-                            id: areaBandeja
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                            onClicked: mouse => {
-                                const m = itemBandeja.modelData;
-                                if (mouse.button === Qt.RightButton || (mouse.button === Qt.LeftButton && m.onlyMenu)) {
-                                    if (m.hasMenu) {
-                                        const p = itemBandeja.mapToItem(null, 0, 0);
-                                        m.display(barra, p.x, -8);
-                                    }
-                                } else if (mouse.button === Qt.MiddleButton) {
-                                    m.secondaryActivate();
-                                } else {
-                                    m.activate();
-                                }
-                            }
-                            onWheel: wheel => itemBandeja.modelData.scroll(wheel.angleDelta.y, false)
-                        }
-                    }
-                }
+            // ---------------------------------------------- bandeja (fixar/ocultar como no Windows)
+            Bandeja {
+                janelaBarra: barra
+                emCima: Ajustes.barraEmCima
             }
 
             // ---------------------------------------------- brilho e luz azul

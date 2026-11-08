@@ -83,6 +83,13 @@ PanelWindow {
                 }
             }
             ItemMenu {
+                texto: "Regra para este app…"
+                onAcionado: {
+                    Estado.executar(["/usr/libexec/nyxz/configuracoes", "regras"]);
+                    Estado.menuAberto = false;
+                }
+            }
+            ItemMenu {
                 texto: "Fechar"
                 onAcionado: {
                     menu.alvo.close();

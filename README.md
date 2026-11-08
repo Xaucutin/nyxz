@@ -47,7 +47,9 @@ Testado na VM (perfil Sugerido, 11 itens): Brave, Discord, Spotify, Vesktop e Pr
 
 Também feitos: **Ajustes** (Configurações → Ajustes, com busca: mini player, prévia e atraso, volume na roda, indicador de privacidade, barra em cima, ícones que crescem, títulos sem o nome do app, borda das janelas, tecla para mover janelas, canto das notificações) e **cola de atalhos** (Super + /, com busca). Conferido na VM: cola de atalhos e busca, barra em cima aplicada na hora, prévia abrindo para baixo e a página Ajustes abrindo.
 
-**Pendentes da Fase 3:** ver a página Ajustes inteira numa tela boa (na VM a 800×600 ela corta à direita: a janela de Configurações tem 900 px de largura natural); bandeja com fixar/ocultar; regras de janela; espaços com nome; serviço `nyxz-audio` (perfis de som).
+Também feitos: **bandeja** com fixar/ocultar (seta com os ícones ocultos e alfinete por app) e **Regras de janela** (Configurações → Regras de janela: a partir das janelas abertas; área de trabalho, flutuante, centralizada, tela cheia e opacidade; também no botão direito do app na barra). A janela de Configurações agora cabe em telas pequenas. Conferido na VM: página de regras listando as janelas abertas e o formato das regras aplicado no Hyprland (janela flutuante, centralizada e 90% de opacidade).
+
+**Pendentes da Fase 3:** conferir a bandeja com um app que tenha ícone (Discord, Steam); espaços com nome; serviço `nyxz-audio` (perfis de som).
 
 **Testes na VM:** com desenho por software, a prévia ao vivo tomava o processador e a digitação pelo VBoxManage embaralhava (agora ela atualiza 2x por segundo nesse caso). Voltar do tty para a sessão gráfica deixa a tela congelada no VirtualBox; para comandar a sessão a partir do tty, use `hyprctl -i 0 dispatch 'hl.dsp.exec_cmd("...")'`.
 

@@ -166,7 +166,7 @@ end)
 -- Gerados pelas telas de Configurações (Telas, Teclado e mouse, Ajustes). Ficam depois dos
 -- padrões e antes do user.lua, que sempre tem a palavra final.
 local home = os.getenv("HOME") or ""
-for _, nome in ipairs({ "telas", "entrada", "ajustes" }) do
+for _, nome in ipairs({ "telas", "entrada", "ajustes", "regras" }) do
     local caminho = home .. "/.config/hypr/nyxz/" .. nome .. ".lua"
     local ok, err = pcall(dofile, caminho)
     if not ok and not tostring(err):find("No such file") then

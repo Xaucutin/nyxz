@@ -16,6 +16,7 @@ ShellRoot {
         { id: "teclado", nome: "Teclado e mouse" },
         { id: "aparencia", nome: "Aparência" },
         { id: "ajustes", nome: "Ajustes" },
+        { id: "regras", nome: "Regras de janela" },
         { id: "componentes", nome: "Apps e componentes" },
         { id: "datahora", nome: "Data e hora" },
         { id: "atualizacoes", nome: "Atualizações" },
@@ -37,8 +38,10 @@ ShellRoot {
     FloatingWindow {
         id: janela
         title: "Configurações"
-        implicitWidth: 900
-        implicitHeight: 600
+        // 900×600, mas nunca maior que a tela (notebooks 1366×768, VMs pequenas).
+        readonly property var tela: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
+        implicitWidth: tela ? Math.min(900, tela.width - 60) : 900
+        implicitHeight: tela ? Math.min(600, tela.height - 100) : 600
         color: Tema.fundo
         visible: true
         onVisibleChanged: if (!visible) Qt.quit()
@@ -145,7 +148,7 @@ ShellRoot {
                         opacity: ativa ? 1 : 0
                         source: {
                             const mapa = { rede: "PaginaRede.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
-                                           teclado: "PaginaTeclado.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", componentes: "PaginaComponentes.qml", datahora: "PaginaDataHora.qml",
+                                           teclado: "PaginaTeclado.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", componentes: "PaginaComponentes.qml", datahora: "PaginaDataHora.qml",
                                            atualizacoes: "PaginaAtualizacoes.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];
                         }
