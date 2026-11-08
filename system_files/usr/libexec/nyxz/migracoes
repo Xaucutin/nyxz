@@ -1,0 +1,28 @@
+#!/usr/bin/bash
+# Ajustes que rodam UMA vez em instalações feitas antes de cada correção.
+# Cada ajuste deixa uma marca em /var/lib/nyxz/migracoes e não roda de novo.
+set -u
+FEITO=/var/lib/nyxz/migracoes
+mkdir -p "$FEITO"
+
+# Idioma: a imagem antiga não tinha o pacote de português, então o instalador caía
+# em "C.UTF-8" (tudo em inglês) mesmo com pt_BR escolhido. Agora o pacote existe.
+if [ ! -e "$FEITO/idioma-pt_BR" ]; then
+  if grep -Eqs '^LANG="?C\.UTF-8"?$' /etc/locale.conf && locale -a 2>/dev/null | grep -qix 'pt_BR.utf8'; then
+    echo 'LANG="pt_BR.UTF-8"' > /etc/locale.conf
+    echo "nyxz-migracoes: idioma do sistema ajustado para pt_BR.UTF-8"
+  fi
+  touch "$FEITO/idioma-pt_BR"
+fi
+
+# Fuso: sem /etc/localtime, ou em UTC, o relógio ficava 3 h adiantado.
+if [ ! -e "$FEITO/fuso-brasilia" ]; then
+  alvo="$(readlink /etc/localtime 2>/dev/null || true)"
+  case "$alvo" in
+    ""|*/UTC|*/Etc/UTC|*/Universal)
+      ln -sf ../usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
+      echo "nyxz-migracoes: fuso ajustado para America/Sao_Paulo" ;;
+  esac
+  touch "$FEITO/fuso-brasilia"
+fi
+exit 0

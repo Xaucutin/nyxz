@@ -63,7 +63,8 @@ Pagina {
         running: true
         repeat: true
         triggeredOnStart: true
-        onTriggered: p.agora = Qt.formatDateTime(new Date(), "dddd, d 'de' MMMM 'de' yyyy · HH:mm:ss")
+        // Sempre em português, mesmo se o idioma da sessão vier diferente.
+        onTriggered: p.agora = new Date().toLocaleString(Qt.locale("pt_BR"), "dddd, d 'de' MMMM 'de' yyyy · HH:mm:ss")
     }
 
     Text {

@@ -151,7 +151,7 @@ systemctl enable greetd.service
 # baixa em segundo plano e aplica no próximo boot que o usuário fizer.
 systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
-systemctl enable nyxz-atualizar.timer
+systemctl enable nyxz-atualizar.timer nyxz-migracoes.service
 # Serviços de usuário da Nyxz: ligados para todos os usuários, sobem com a sessão gráfica.
 systemctl --global enable nyxz-scoped.service
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações

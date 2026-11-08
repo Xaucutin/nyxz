@@ -47,3 +47,5 @@ python3
 unzip
 # Linguagens pelo mise: os binários oficiais do Node.js precisam desta biblioteca
 libatomic
+# Português do Brasil no sistema (sem isto o instalador cai em C.UTF-8 e tudo fica em inglês)
+glibc-langpack-pt
