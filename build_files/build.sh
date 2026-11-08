@@ -166,6 +166,12 @@ ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-setup/icones
 for f in Botao.qml ListaComponentes.qml Executor.qml; do
   ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-setup/$f"
 done
+# O Dev Hub usa o tema, os ícones e os componentes das Configurações.
+ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-dev/Tema.qml
+ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-dev/icones
+for f in Botao.qml Pagina.qml Linha.qml Comando.qml Interruptor.qml; do
+  ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-dev/$f"
+done
 
 # ---------------------------------------------------------------- serviços
 log "Serviços"

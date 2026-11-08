@@ -54,6 +54,12 @@ ROTAS = {
         (SHELL.parent / "nyxz-config", lambda r: r in ("Botao.qml", "ListaComponentes.qml", "Executor.qml", "Comando.qml")),
         (SHELL.parent / "nyxz-setup", lambda r: True),
     ]),
+    # Dev Hub: os arquivos dele + tema, ícones e componentes das Configurações
+    "/dev.tgz": lambda: empacotar([
+        (SHELL, lambda r: r == "Tema.qml" or r.startswith("icones/")),
+        (SHELL.parent / "nyxz-config", lambda r: r in ("Botao.qml", "Pagina.qml", "Linha.qml", "Comando.qml", "Interruptor.qml")),
+        (SHELL.parent / "nyxz-dev", lambda r: True),
+    ]),
     # Scripts e dados de /usr (nyx dev usr): vão para um /usr temporário (bootc usr-overlay)
     "/usr.tgz": lambda: empacotar([
         (RAIZ / "system_files" / "usr", lambda r: r.startswith(("libexec/nyxz/", "share/nyxz/", "share/kio/", "bin/", "lib/systemd/user/"))),

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dev Hub
+GenericName=Ferramentas de desenvolvimento
+Comment=Bancos locais (PostgreSQL, MariaDB, MySQL, Redis, MongoDB) e portas em uso
+Exec=/usr/libexec/nyxz/dev-hub
+Icon=utilities-terminal
+Categories=Development;
+Keywords=dev;banco;database;postgres;postgresql;mysql;mariadb;redis;mongo;mongodb;xampp;porta;portas;localhost;servidor;

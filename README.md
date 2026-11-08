@@ -55,6 +55,10 @@ Também feitos e conferidos na VM (imagem 2081d44): **espaços com nome** (a bar
 
 **Testes na VM:** com desenho por software, a prévia ao vivo tomava o processador e a digitação pelo VBoxManage embaralhava (agora ela atualiza 2x por segundo nesse caso). Voltar do tty para a sessão gráfica deixa a tela congelada no VirtualBox; para comandar a sessão a partir do tty, use `hyprctl -i 0 dispatch 'hl.dsp.exec_cmd("...")'`.
 
+**Fase 4 — desenvolvimento: em andamento.** Dev Hub (app em QML, só ocupa memória aberto; busca → "Dev Hub"): **Bancos locais** (PostgreSQL, MariaDB, MySQL, Redis, MongoDB em containers Podman da conta do usuário, só em 127.0.0.1, com dados em volume; ligar/parar, copiar conexão, logs, remover guardando ou apagando os dados) e **Portas em uso** (quem usa cada porta, "Abrir no navegador" para servidores de desenvolvimento, encerrar processos da própria conta, bancos do Dev Hub identificados). Por baixo: `/usr/libexec/nyxz/nyxz-dev` (também usável no terminal). Conferido na VM: PostgreSQL 17 criado pelo Dev Hub e respondendo a consultas; página de portas com servidor de teste e o banco.
+
+**Próximos da Fase 4:** SSH (hosts, chaves, túneis), Discord Studio (bots e editor de embeds), cofre de segredos, domínios `.test` com HTTPS, túnel público, sessões de projeto e limpeza de disco para dev.
+
 ## Ferramentas de desenvolvimento
 
 - `tools/dev-servidor.py`: serve o shell, o login e as Configurações em `http://127.0.0.1/` (na VM: `10.0.2.2`). Na VM, `nyx dev` baixa o shell e reinicia; `nyx dev limpar` volta ao da imagem.

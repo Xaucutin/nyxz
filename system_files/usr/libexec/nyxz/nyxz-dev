@@ -1,0 +1,260 @@
+#!/usr/bin/python3 -I
+"""nyxz-dev — o que o Dev Hub faz por baixo (também dá para usar no terminal).
+
+Bancos locais (estilo XAMPP), cada um num container Podman da sua conta (sem senha
+de administrador), com os dados num volume próprio:
+  nyxz-dev bancos tipos                                   JSON: tipos e versões
+  nyxz-dev bancos listar                                  JSON: bancos e se estão ligados
+  nyxz-dev bancos criar <tipo> <versão> <nome> <porta> <usuário> <senha>
+  nyxz-dev bancos iniciar|parar|logs <nome>
+  nyxz-dev bancos remover <nome> [--apagar-dados]
+
+Portas em uso:
+  nyxz-dev portas                                         JSON: porta, endereço, processo, pid
+  nyxz-dev portas encerrar <pid>
+
+Progresso (criar): linhas "PASSO|texto" e "LOG|texto"; última: "FIM|ok" ou "FIM|erro|mensagem".
+"""
+import json
+import os
+import re
+import signal
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+PASTA = Path.home() / ".config/nyxz/dev"
+BANCOS = PASTA / "bancos.json"
+ROTULO = "nyxz.banco"
+
+# tipo -> imagem, versões, porta interna, pasta de dados, ambiente e conexão
+TIPOS = {
+    "postgres": {
+        "nome": "PostgreSQL", "imagem": "docker.io/library/postgres", "versoes": ["17", "16", "15"],
+        "porta": 5432, "dados": "/var/lib/postgresql/data",
+        "env": lambda u, s, n: {"POSTGRES_USER": u, "POSTGRES_PASSWORD": s, "POSTGRES_DB": n},
+        "conexao": "postgresql://{u}:{s}@localhost:{p}/{n}",
+    },
+    "mariadb": {
+        "nome": "MariaDB", "imagem": "docker.io/library/mariadb", "versoes": ["11", "10.11"],
+        "porta": 3306, "dados": "/var/lib/mysql",
+        "env": lambda u, s, n: {"MARIADB_ROOT_PASSWORD": s, "MARIADB_USER": u, "MARIADB_PASSWORD": s, "MARIADB_DATABASE": n},
+        "conexao": "mysql://{u}:{s}@localhost:{p}/{n}",
+    },
+    "mysql": {
+        "nome": "MySQL", "imagem": "docker.io/library/mysql", "versoes": ["8.4", "8.0"],
+        "porta": 3306, "dados": "/var/lib/mysql",
+        "env": lambda u, s, n: {"MYSQL_ROOT_PASSWORD": s, "MYSQL_USER": u, "MYSQL_PASSWORD": s, "MYSQL_DATABASE": n},
+        "conexao": "mysql://{u}:{s}@localhost:{p}/{n}",
+    },
+    "redis": {
+        "nome": "Redis", "imagem": "docker.io/library/redis", "versoes": ["7", "8"],
+        "porta": 6379, "dados": "/data",
+        "env": lambda u, s, n: {},
+        "comando": lambda s: ["redis-server", "--appendonly", "yes", "--requirepass", s],
+        "conexao": "redis://:{s}@localhost:{p}",
+    },
+    "mongodb": {
+        "nome": "MongoDB", "imagem": "docker.io/library/mongo", "versoes": ["8", "7"],
+        "porta": 27017, "dados": "/data/db",
+        "env": lambda u, s, n: {"MONGO_INITDB_ROOT_USERNAME": u, "MONGO_INITDB_ROOT_PASSWORD": s},
+        "conexao": "mongodb://{u}:{s}@localhost:{p}/?authSource=admin",
+    },
+}
+
+
+def passo(t):
+    print(f"PASSO|{t}", flush=True)
+
+
+def fim(ok=True, msg=""):
+    print("FIM|ok" if ok else f"FIM|erro|{msg}", flush=True)
+    sys.exit(0 if ok else 1)
+
+
+def rodar(cmd, mostrar=False):
+    if not mostrar:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.returncode, r.stdout + r.stderr
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for linha in p.stdout:
+        linha = linha.strip()
+        if linha:
+            print(f"LOG|{linha}", flush=True)
+    return p.wait(), ""
+
+
+def ler_bancos():
+    try:
+        return json.loads(BANCOS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def gravar_bancos(lista):
+    PASTA.mkdir(parents=True, exist_ok=True)
+    BANCOS.write_text(json.dumps(lista, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.chmod(BANCOS, 0o600)   # tem senhas: só o dono lê (até o cofre chegar)
+
+
+def porta_livre(porta):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", porta))
+            return True
+        except OSError:
+            return False
+
+
+def conexao(b):
+    t = TIPOS[b["tipo"]]
+    return t["conexao"].format(u=b["usuario"], s=b["senha"], p=b["porta"], n=b["nome"])
+
+
+# ------------------------------------------------------------------ bancos
+
+def bancos_listar():
+    _, saida = rodar(["podman", "ps", "-a", "--filter", f"label={ROTULO}", "--format", "json"])
+    try:
+        estado = {c["Names"][0]: c.get("State", "") for c in json.loads(saida or "[]")}
+    except (ValueError, KeyError, IndexError):
+        estado = {}
+    lista = []
+    for b in ler_bancos():
+        st = estado.get("nyxz-" + b["nome"], "ausente")
+        lista.append({**b, "tipoNome": TIPOS[b["tipo"]]["nome"], "estado": st,
+                      "ligado": st == "running", "conexao": conexao(b)})
+    print(json.dumps(lista, ensure_ascii=False))
+
+
+def bancos_criar(tipo, versao, nome, porta, usuario, senha):
+    if tipo not in TIPOS:
+        fim(False, f"Tipo desconhecido: {tipo}")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,30}", nome):
+        fim(False, "Nome inválido: use letras minúsculas, números, - e _.")
+    if any(b["nome"] == nome for b in ler_bancos()):
+        fim(False, f"Já existe um banco chamado {nome}.")
+    porta = int(porta)
+    if not porta_livre(porta):
+        fim(False, f"A porta {porta} já está em uso. Escolha outra.")
+    t = TIPOS[tipo]
+    imagem = f"{t['imagem']}:{versao}"
+    passo(f"Baixando {t['nome']} {versao} (só na primeira vez)")
+    codigo, _ = rodar(["podman", "pull", imagem], mostrar=True)
+    if codigo != 0:
+        fim(False, "Não foi possível baixar a imagem. Verifique a internet.")
+    passo("Criando o banco")
+    cmd = ["podman", "create", "--name", f"nyxz-{nome}", "--label", f"{ROTULO}={tipo}",
+           "-p", f"127.0.0.1:{porta}:{t['porta']}", "-v", f"nyxz-{nome}:{t['dados']}"]
+    for k, v in t["env"](usuario, senha, nome).items():
+        cmd += ["-e", f"{k}={v}"]
+    cmd.append(imagem)
+    if "comando" in t:
+        cmd += t["comando"](senha)
+    codigo, saida = rodar(cmd)
+    if codigo != 0:
+        fim(False, "Não foi possível criar o container: " + saida.strip().splitlines()[-1][:200])
+    lista = ler_bancos()
+    lista.append({"nome": nome, "tipo": tipo, "versao": versao, "porta": porta,
+                  "usuario": usuario, "senha": senha})
+    gravar_bancos(lista)
+    passo("Ligando")
+    codigo, saida = rodar(["podman", "start", f"nyxz-{nome}"])
+    if codigo != 0:
+        fim(False, "Criado, mas não ligou: " + saida.strip()[-200:])
+    fim()
+
+
+def bancos_acao(acao, nome, apagar=False):
+    c = f"nyxz-{nome}"
+    if acao == "iniciar":
+        codigo, saida = rodar(["podman", "start", c])
+    elif acao == "parar":
+        codigo, saida = rodar(["podman", "stop", "-t", "10", c])
+    elif acao == "logs":
+        codigo, saida = rodar(["podman", "logs", "--tail", "200", c])
+        print(saida)
+        return 0
+    elif acao == "remover":
+        rodar(["podman", "rm", "-f", c])
+        if apagar:
+            rodar(["podman", "volume", "rm", "-f", c])
+        gravar_bancos([b for b in ler_bancos() if b["nome"] != nome])
+        return 0
+    else:
+        return 2
+    if codigo != 0:
+        print(saida.strip()[-300:], file=sys.stderr)
+    return codigo
+
+
+# ------------------------------------------------------------------ portas
+
+# Processos que costumam ser servidores de desenvolvimento (para "Abrir no navegador")
+DEV = ("node", "bun", "deno", "python", "python3", "php", "ruby", "go", "java", "vite", "next-server", "caddy", "nginx", "httpd")
+
+
+def portas():
+    _, saida = rodar(["ss", "-ltnpH"])
+    # Bancos do Dev Hub: a porta deles é atendida pelo ajudante de rede do Podman
+    # (pasta/rootlessport); mostra o nome do banco e não oferece "Encerrar".
+    bancos = {b["porta"]: b["nome"] for b in ler_bancos()}
+    lista, vistos = [], set()
+    for linha in saida.splitlines():
+        partes = linha.split()
+        if len(partes) < 4:
+            continue
+        local = partes[3]
+        endereco, _, porta = local.rpartition(":")
+        m = re.search(r'users:\(\("([^"]+)",pid=(\d+)', linha)
+        proc, pid = (m.group(1), int(m.group(2))) if m else ("", 0)
+        chave = (porta, pid)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        numero = int(porta) if porta.isdigit() else 0
+        podman = proc.startswith(("pasta", "rootlessport", "slirp4netns", "conmon"))
+        if podman and numero in bancos:
+            proc, pid = f"banco {bancos[numero]}", 0
+        lista.append({
+            "porta": numero,
+            "endereco": endereco.strip("[]"),
+            "processo": proc,
+            "pid": pid,
+            # Só os processos da própria conta aparecem com nome/pid (sem root)
+            "meu": pid > 0 and not podman,
+            "banco": numero in bancos and podman,
+            "dev": proc in DEV or proc.startswith("node"),
+        })
+    lista.sort(key=lambda x: x["porta"])
+    print(json.dumps(lista, ensure_ascii=False))
+
+
+def encerrar(pid):
+    try:
+        os.kill(int(pid), signal.SIGTERM)
+        return 0
+    except (OSError, ValueError) as e:
+        print(f"Não foi possível encerrar: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if a[:2] == ["bancos", "tipos"]:
+        print(json.dumps({k: {"nome": v["nome"], "versoes": v["versoes"], "porta": v["porta"]} for k, v in TIPOS.items()}, ensure_ascii=False))
+    elif a[:2] == ["bancos", "listar"]:
+        bancos_listar()
+    elif a[:2] == ["bancos", "criar"] and len(a) == 8:
+        bancos_criar(*a[2:])
+    elif len(a) >= 3 and a[0] == "bancos" and a[1] in ("iniciar", "parar", "logs", "remover"):
+        sys.exit(bancos_acao(a[1], a[2], "--apagar-dados" in a))
+    elif a[:1] == ["portas"] and len(a) == 1:
+        portas()
+    elif a[:2] == ["portas", "encerrar"] and len(a) == 3:
+        sys.exit(encerrar(a[2]))
+    else:
+        print(__doc__)
+        sys.exit(2)
