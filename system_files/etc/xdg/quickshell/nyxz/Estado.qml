@@ -38,4 +38,16 @@ Singleton {
     function executar(comando) {
         Quickshell.execDetached(comando);
     }
+
+    // Ajuste "Remove Taskbar Window Suffixes": tira o nome do app do fim do título
+    // ("Página — Brave" → "Página"). Vale para prévias e menus.
+    readonly property var sufixos: [
+        / [—–-] Brave$/, / [—–-] Mozilla Firefox$/, / [—–-] Visual Studio Code$/,
+        / [—–-] Dolphin$/, / [—–-] Discord$/, / [—–-] Vesktop$/, / [—–-] Ghostty$/
+    ]
+    function tituloLimpo(t) {
+        let s = t || "";
+        for (const r of sufixos) s = s.replace(r, "");
+        return s;
+    }
 }

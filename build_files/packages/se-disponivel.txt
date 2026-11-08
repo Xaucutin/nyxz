@@ -40,3 +40,5 @@ vulkan-tools
 pciutils
 # notify-send: notificações a partir de scripts da Nyxz
 libnotify
+# Ferramentas do PipeWire (pw-record, pw-top): diagnóstico e testes de som
+pipewire-utils

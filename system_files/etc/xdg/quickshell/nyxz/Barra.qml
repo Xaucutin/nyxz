@@ -30,6 +30,8 @@ PanelWindow {
         objects: [Pipewire.defaultAudioSink]
     }
 
+    PreviaJanela { id: previa }
+
     Rectangle {
         anchors.fill: parent
         radius: Tema.raio
@@ -160,7 +162,10 @@ PanelWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                            onEntered: if (!Estado.menuAberto) previa.mostrar(tarefa.modelData, tarefa)
+                            onExited: previa.agendarFechar()
                             onClicked: mouse => {
+                                previa.esconder();
                                 if (mouse.button === Qt.RightButton) {
                                     const p = tarefa.mapToItem(null, 0, 0);
                                     Estado.fecharTudo();
@@ -178,7 +183,17 @@ PanelWindow {
                 }
             }
 
+            // ---------------------------------------------- mini player (só com mídia)
+            MiniPlayer {
+                Layout.leftMargin: 8
+            }
+
             Item { Layout.fillWidth: true }
+
+            // ---------------------------------------------- privacidade (só em uso)
+            Privacidade {
+                Layout.rightMargin: 6
+            }
 
             // ---------------------------------------------- bandeja
             Row {
