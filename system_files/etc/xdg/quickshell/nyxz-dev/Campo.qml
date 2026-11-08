@@ -11,6 +11,9 @@ ColumnLayout {
     property bool oculto: false
     readonly property bool aceito: !validador || validador.test(entrada.text)
     spacing: 4
+    // Layout dentro de layout estica por padrão e ignora a largura pedida:
+    // aqui só estica quem pedir (Layout.fillWidth: true na hora de usar).
+    Layout.fillWidth: false
 
     Text { text: campo.rotulo; font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto3 }
     Rectangle {

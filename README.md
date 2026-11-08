@@ -57,7 +57,9 @@ Também feitos e conferidos na VM (imagem 2081d44): **espaços com nome** (a bar
 
 **Fase 4 — desenvolvimento: em andamento.** Dev Hub (app em QML, só ocupa memória aberto; busca → "Dev Hub"): **Bancos locais** (PostgreSQL, MariaDB, MySQL, Redis, MongoDB em containers Podman da conta do usuário, só em 127.0.0.1, com dados em volume; ligar/parar, copiar conexão, logs, remover guardando ou apagando os dados) e **Portas em uso** (quem usa cada porta, "Abrir no navegador" para servidores de desenvolvimento, encerrar processos da própria conta, bancos do Dev Hub identificados). Por baixo: `/usr/libexec/nyxz/nyxz-dev` (também usável no terminal). Conferido na VM: PostgreSQL 17 criado pelo Dev Hub e respondendo a consultas; página de portas com servidor de teste e o banco.
 
-**Próximos da Fase 4:** SSH (hosts, chaves, túneis), Discord Studio (bots e editor de embeds), cofre de segredos, domínios `.test` com HTTPS, túnel público, sessões de projeto e limpeza de disco para dev.
+Também feitos e conferidos na VM (imagem bb2a50c): **SSH** no Dev Hub (servidor SSH do computador agora vem desligado; hosts do `~/.ssh/config` com conectar, arquivos via SFTP, túnel e remover; gerar e copiar chaves) e **Cofre** (segredos no chaveiro do sistema, destravado no login; a lista só mostra nomes; as senhas dos bancos novos vão para lá). RAM com o chaveiro: 677 MB.
+
+**Próximos da Fase 4:** Discord Studio (bots e editor de embeds), domínios `.test` com HTTPS, túnel público, sessões de projeto (com o cofre injetando as variáveis) e limpeza de disco para dev.
 
 ## Ferramentas de desenvolvimento
 
