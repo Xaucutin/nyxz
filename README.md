@@ -32,14 +32,21 @@ Distro Linux pessoal focada em programação e jogos: Hyprland com interface pr�
 - Xwayland (70 MB) inicia junto com a sessão; avaliar iniciar só quando um app X11 abrir.
 - Teste de RAM automático no CI (hoje medido à mão na VM).
 
-**Fase 2 — fundações: em andamento.** Já no ar (commit 983f01a): catálogo de componentes, motor `/usr/libexec/nyxz/componentes` (Flatpak na conta do usuário + imagem local personalizada para apps nativos), Nyxz Setup no primeiro login e Configurações → Apps e componentes. Na VM, o Setup abre e as telas funcionam.
+**Fase 2 — fundações: em andamento.** Catálogo de componentes, motor `/usr/libexec/nyxz/componentes` (Flatpak na conta do usuário + imagem local personalizada para apps nativos), Nyxz Setup no primeiro login e Configurações → Apps e componentes.
 
-**Pendente atual:** instalando o perfil Sugerido, o `flatpak install --user` do Brave parou em "Installing runtime/org.freedesktop.Platform.Locale" (download parado). Investigar antes de testar a parte nativa (pkexec + podman build).
+Testado na VM (perfil Sugerido, 11 itens): Brave, Discord, Spotify, Vesktop e Prism instalados por Flatpak; Ghostty, VS Code, Steam, Dolphin, Git/gh e GameMode/MangoHud na imagem local, montada com podman e ativada no boot seguinte. **RAM depois do login continua em 683 MB** (os apps não pesam parados). Disco: 17 de 38 GB.
+
+**Pendentes da Fase 2:**
+- Confirmar na VM o Ghostty abrindo com `LIBGL_ALWAYS_SOFTWARE` (só em VirtualBox/VMware) e o caminho de atualização com imagem local (Configurações → Atualizações → reconstrói sobre a base nova).
+- Janela de senha de administrador no estilo da Nyxz (hoje é o mate-polkit, claro e em inglês).
+- A camada de apps nativos ficou com 3,6 GB; ver o que puxa tanto (Steam 32 bits, dependências KDE do Dolphin).
+- Serviços nyxz-scoped, nyxz-audio e nyxz-netd; Baloo desligado no Dolphin; Spicetify; linguagens pelo mise.
 
 ## Ferramentas de desenvolvimento
 
 - `tools/dev-servidor.py`: serve o shell, o login e as Configurações em `http://127.0.0.1/` (na VM: `10.0.2.2`). Na VM, `nyx dev` baixa o shell e reinicia; `nyx dev limpar` volta ao da imagem.
 - `tools/vm-digitar.ps1`: digita texto na VM `Nyxz-Teste` (teclado ABNT2) pelo VBoxManage.
+- VirtualBox no Windows: deixe o "cache de E/S do hospedeiro" ligado no controlador SATA (`VBoxManage storagectl <vm> --name SATA --hostiocache on`). Sem ele, com pouca RAM livre no PC, o disco virtual parou de responder (`AHCI#0: Port 0 reset` no VBox.log) e tudo na VM parecia travado.
 
 ## Estrutura
 

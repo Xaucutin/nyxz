@@ -120,6 +120,9 @@ sed -i \
 grep -q '^VARIANT_ID=' /usr/lib/os-release \
   && sed -i 's/^VARIANT_ID=.*/VARIANT_ID=nyxz/' /usr/lib/os-release \
   || echo 'VARIANT_ID=nyxz' >> /usr/lib/os-release
+# Fuso padrão: Brasília. Sem isto, o relógio ficava em UTC (3 h adiantado) mesmo com
+# "timezone America/Sao_Paulo" no instalador. Dá para mudar em Configurações.
+ln -sf ../usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
 mkdir -p /usr/share/nyxz
 echo "${NYXZ_VERSION}" > /usr/share/nyxz/versao
 echo "${NYXZ_IMAGE_BASE:-ghcr.io/xaucutin/nyxz:${FEDORA_VERSION}}" > /usr/share/nyxz/imagem-base

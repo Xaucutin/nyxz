@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Abre as Configurações da Nyxz, opcionalmente numa página:
-#   configuracoes [rede|som|telas|teclado|atualizacoes|sobre]
+#   configuracoes [rede|som|telas|teclado|componentes|datahora|atualizacoes|sobre]
 # Se já estiver aberta, só troca de página.
 pagina="${1:-}"
 if qs -c nyxz-config ipc show >/dev/null 2>&1; then

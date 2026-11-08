@@ -30,6 +30,12 @@ local lancador = "qs -c nyxz ipc call busca alternar || nyx run fuzzel"
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
 
+-- O hyprland-guiutils (diálogos do próprio Hyprland) não tem pacote para o Fedora 44
+-- no COPR usado; sem isto, aparece um aviso amarelo em inglês a cada login.
+-- Os diálogos que importam (senha, energia, avisos) são feitos pelo shell da Nyxz.
+tentar(function() hl.config({ misc = { disable_hyprland_guiutils_check = true } }) end)
+tentar(function() hl.config({ ecosystem = { no_update_news = true, no_donation_nag = true } }) end)
+
 -------------------
 ---- APARÊNCIA ----
 -------------------
