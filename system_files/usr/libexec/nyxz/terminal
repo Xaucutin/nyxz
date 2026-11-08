@@ -1,7 +1,17 @@
 #!/usr/bin/bash
 # Abre o terminal escolhido no Nyxz Setup; sem escolha, usa o de emergência (foot).
+#   terminal                abre um terminal
+#   terminal -e cmd [args]  abre um terminal rodando o comando (ex.: ssh servidor)
 for t in ghostty kitty foot; do
-  if command -v "$t" >/dev/null 2>&1; then exec "$t" "$@"; fi
+  command -v "$t" >/dev/null 2>&1 || continue
+  if [ "${1:-}" = "-e" ]; then
+    shift
+    case "$t" in
+      ghostty) exec ghostty -e "$@" ;;
+      *)       exec "$t" "$@" ;;   # kitty e foot recebem o comando direto
+    esac
+  fi
+  exec "$t" "$@"
 done
 echo "Nenhum terminal encontrado" >&2
 exit 1

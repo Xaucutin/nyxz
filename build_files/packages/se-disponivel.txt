@@ -47,3 +47,8 @@ ddcutil
 brightnessctl
 # Filtro de luz azul quando o hyprsunset não tem pacote (Wayland, wlr-gamma-control)
 gammastep
+# Chaveiro do sistema (Secret Service): cofre do Dev Hub e logins do VS Code, Brave e Discord.
+# O PAM do greetd do Fedora já destrava o chaveiro no login.
+gnome-keyring
+gnome-keyring-pam
+libsecret

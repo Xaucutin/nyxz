@@ -13,10 +13,29 @@ Portas em uso:
   nyxz-dev portas                                         JSON: porta, endereço, processo, pid
   nyxz-dev portas encerrar <pid>
 
+Cofre de segredos (chaveiro do sistema, Secret Service):
+  nyxz-dev cofre listar                                   JSON: nomes (nunca os valores)
+  nyxz-dev cofre guardar <nome>                           valor pela entrada padrão
+  nyxz-dev cofre ler <nome>
+  nyxz-dev cofre remover <nome>
+
+SSH:
+  nyxz-dev ssh hosts                                      JSON: hosts do ~/.ssh/config
+  nyxz-dev ssh adicionar <nome> <endereço> <usuário> <porta> [chave]
+  nyxz-dev ssh remover <nome>
+  nyxz-dev ssh chaves                                     JSON: chaves em ~/.ssh
+  nyxz-dev ssh gerar <nome> <comentário>                  ed25519
+  nyxz-dev ssh tuneis                                     JSON: túneis abertos
+  nyxz-dev ssh tunel <host> <porta-local> <porta-remota>
+  nyxz-dev ssh fechar <pid>
+  nyxz-dev ssh servidor estado|ligar|desligar             servidor SSH deste computador
+
 Progresso (criar): linhas "PASSO|texto" e "LOG|texto"; última: "FIM|ok" ou "FIM|erro|mensagem".
 """
 import json
 import os
+import shutil
+import time
 import re
 import signal
 import socket
@@ -108,6 +127,60 @@ def porta_livre(porta):
             return False
 
 
+# ------------------------------------------------------------------ cofre
+
+def cofre_ok():
+    return shutil.which("secret-tool") is not None
+
+
+def cofre_guardar(nome, valor, tipo="segredo"):
+    if not cofre_ok():
+        return False
+    r = subprocess.run(["secret-tool", "store", "--label", f"Nyxz: {nome}", "app", "nyxz", "tipo", tipo, "nome", nome],
+                       input=valor, text=True, capture_output=True)
+    return r.returncode == 0
+
+
+def cofre_ler(nome, tipo="segredo"):
+    if not cofre_ok():
+        return ""
+    codigo, saida = rodar(["secret-tool", "lookup", "app", "nyxz", "tipo", tipo, "nome", nome])
+    return saida if codigo == 0 else ""
+
+
+def cofre_remover(nome, tipo="segredo"):
+    if cofre_ok():
+        rodar(["secret-tool", "clear", "app", "nyxz", "tipo", tipo, "nome", nome])
+
+
+def cofre_listar():
+    if not cofre_ok():
+        print(json.dumps({"disponivel": False, "itens": []}))
+        return
+    r = subprocess.run(["secret-tool", "search", "--all", "app", "nyxz", "tipo", "segredo"],
+                       capture_output=True, text=True)
+    itens, atual = [], {}
+    # Junta stdout e stderr: o secret-tool divide os campos entre os dois. O valor
+    # ("secret = ...") é ignorado: esta lista nunca mostra segredos.
+    for linha in (r.stdout + "\n" + r.stderr).splitlines():
+        if linha.startswith("["):
+            if atual.get("nome"):
+                itens.append(atual)
+            atual = {}
+        elif linha.startswith("attribute.nome = "):
+            atual["nome"] = linha.split(" = ", 1)[1]
+        elif linha.startswith("modified = "):
+            atual["alterado"] = linha.split(" = ", 1)[1]
+    if atual.get("nome"):
+        itens.append(atual)
+    vistos, unicos = set(), []
+    for i in sorted(itens, key=lambda x: x["nome"].lower()):
+        if i["nome"] not in vistos:
+            vistos.add(i["nome"])
+            unicos.append(i)
+    print(json.dumps({"disponivel": True, "itens": unicos}, ensure_ascii=False))
+
+
 def conexao(b):
     t = TIPOS[b["tipo"]]
     return t["conexao"].format(u=b["usuario"], s=b["senha"], p=b["porta"], n=b["nome"])
@@ -123,6 +196,8 @@ def bancos_listar():
         estado = {}
     lista = []
     for b in ler_bancos():
+        if b.get("noCofre"):
+            b["senha"] = cofre_ler(b["nome"], tipo="banco")
         st = estado.get("nyxz-" + b["nome"], "ausente")
         lista.append({**b, "tipoNome": TIPOS[b["tipo"]]["nome"], "estado": st,
                       "ligado": st == "running", "conexao": conexao(b)})
@@ -157,8 +232,9 @@ def bancos_criar(tipo, versao, nome, porta, usuario, senha):
     if codigo != 0:
         fim(False, "Não foi possível criar o container: " + saida.strip().splitlines()[-1][:200])
     lista = ler_bancos()
+    no_cofre = cofre_guardar(nome, senha, tipo="banco")
     lista.append({"nome": nome, "tipo": tipo, "versao": versao, "porta": porta,
-                  "usuario": usuario, "senha": senha})
+                  "usuario": usuario, "senha": "" if no_cofre else senha, "noCofre": no_cofre})
     gravar_bancos(lista)
     passo("Ligando")
     codigo, saida = rodar(["podman", "start", f"nyxz-{nome}"])
@@ -181,6 +257,7 @@ def bancos_acao(acao, nome, apagar=False):
         rodar(["podman", "rm", "-f", c])
         if apagar:
             rodar(["podman", "volume", "rm", "-f", c])
+        cofre_remover(nome, tipo="banco")
         gravar_bancos([b for b in ler_bancos() if b["nome"] != nome])
         return 0
     else:
@@ -241,6 +318,156 @@ def encerrar(pid):
         return 1
 
 
+# ------------------------------------------------------------------ SSH
+
+SSH = Path.home() / ".ssh"
+SSH_CONFIG = SSH / "config"
+
+
+def ssh_pasta():
+    SSH.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(SSH, 0o700)
+
+
+def ssh_blocos():
+    """[(nomes, linhas)] do ~/.ssh/config; o que vem antes do 1º Host fica com nomes=None."""
+    try:
+        linhas = SSH_CONFIG.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    blocos, atual = [], (None, [])
+    for linha in linhas:
+        partes = linha.strip().split(None, 1)
+        if partes and partes[0].lower() == "host":
+            blocos.append(atual)
+            atual = (partes[1].split() if len(partes) > 1 else [], [linha])
+        else:
+            atual[1].append(linha)
+    blocos.append(atual)
+    return blocos
+
+
+def ssh_hosts():
+    hosts = []
+    for nomes, linhas in ssh_blocos():
+        if not nomes:
+            continue
+        props = {}
+        for linha in linhas[1:]:
+            partes = linha.strip().split(None, 1)
+            if len(partes) == 2 and not partes[0].startswith("#"):
+                props[partes[0].lower()] = partes[1]
+        for nome in nomes:
+            if any(c in nome for c in "*?!"):
+                continue   # padrões (Host *) não são destinos
+            hosts.append({"nome": nome, "endereco": props.get("hostname", nome),
+                          "usuario": props.get("user", ""), "porta": props.get("port", "22"),
+                          "chave": props.get("identityfile", "")})
+    print(json.dumps(hosts, ensure_ascii=False))
+
+
+def ssh_adicionar(nome, endereco, usuario, porta, chave=""):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", nome):
+        print("Nome inválido: use letras, números, ponto, - e _.", file=sys.stderr)
+        return 1
+    if any(nome in (n or []) for n, _ in ssh_blocos()):
+        print(f"Já existe um host chamado {nome}.", file=sys.stderr)
+        return 1
+    ssh_pasta()
+    bloco = [f"\nHost {nome}", f"    HostName {endereco}"]
+    if usuario:
+        bloco.append(f"    User {usuario}")
+    if porta and porta != "22":
+        bloco.append(f"    Port {porta}")
+    if chave:
+        bloco.append(f"    IdentityFile {chave}")
+    with open(SSH_CONFIG, "a", encoding="utf-8") as f:
+        f.write("\n".join(bloco) + "\n")
+    os.chmod(SSH_CONFIG, 0o600)
+    return 0
+
+
+def ssh_remover(nome):
+    blocos = ssh_blocos()
+    novo = []
+    for nomes, linhas in blocos:
+        if nomes == [nome]:
+            continue
+        novo.extend(linhas)
+    SSH_CONFIG.write_text("\n".join(novo).strip("\n") + "\n", encoding="utf-8")
+    return 0
+
+
+def ssh_chaves():
+    chaves = []
+    for pub in sorted(SSH.glob("*.pub")) if SSH.exists() else []:
+        codigo, saida = rodar(["ssh-keygen", "-lf", str(pub)])
+        partes = saida.split()
+        chaves.append({
+            "nome": pub.stem,
+            "arquivo": str(pub.with_suffix("")),
+            "impressao": partes[1] if codigo == 0 and len(partes) > 1 else "",
+            "tipo": partes[-1].strip("()") if codigo == 0 and partes else "",
+            "publica": pub.read_text(encoding="utf-8", errors="replace").strip(),
+        })
+    print(json.dumps(chaves, ensure_ascii=False))
+
+
+def ssh_gerar(nome, comentario):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", nome):
+        print("Nome inválido.", file=sys.stderr)
+        return 1
+    ssh_pasta()
+    destino = SSH / nome
+    if destino.exists():
+        print(f"Já existe uma chave chamada {nome}.", file=sys.stderr)
+        return 1
+    codigo, saida = rodar(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", comentario, "-f", str(destino)])
+    if codigo != 0:
+        print(saida, file=sys.stderr)
+    return codigo
+
+
+def ssh_tuneis():
+    _, saida = rodar(["pgrep", "-af", "ssh -N .*-L"])
+    tuneis = []
+    for linha in saida.splitlines():
+        m = re.search(r"^(\d+) .*-L 127\.0\.0\.1:(\d+):localhost:(\d+) (\S+)$", linha)
+        if m:
+            tuneis.append({"pid": int(m.group(1)), "local": int(m.group(2)),
+                           "remota": int(m.group(3)), "host": m.group(4)})
+    print(json.dumps(tuneis, ensure_ascii=False))
+
+
+def ssh_tunel(host, local, remota):
+    if not porta_livre(int(local)):
+        print(f"A porta {local} já está em uso aqui.", file=sys.stderr)
+        return 1
+    # BatchMode: túnel só com chave (sem perguntar senha num processo invisível)
+    p = subprocess.Popen(["ssh", "-N", "-o", "ExitOnForwardFailure=yes", "-o", "BatchMode=yes",
+                          "-o", "ServerAliveInterval=30",
+                          "-L", f"127.0.0.1:{int(local)}:localhost:{int(remota)}", host],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    time.sleep(3)
+    if p.poll() is not None:
+        erro = (p.stderr.read() or "").strip().splitlines()
+        print("O túnel não abriu: " + (erro[-1] if erro else "verifique o host e a chave."), file=sys.stderr)
+        return 1
+    return 0
+
+
+def ssh_servidor(acao):
+    if acao == "estado":
+        ativo = rodar(["systemctl", "is-active", "--quiet", "sshd.service"])[0] == 0
+        print(json.dumps({"ativo": ativo}))
+        return 0
+    cmd = ["enable", "--now"] if acao == "ligar" else ["disable", "--now"]
+    codigo, saida = rodar(["pkexec", "systemctl", *cmd, "sshd.service"])
+    if codigo != 0:
+        print("Não foi possível mudar o servidor SSH (senha cancelada?).", file=sys.stderr)
+    return codigo
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:2] == ["bancos", "tipos"]:
@@ -255,6 +482,32 @@ if __name__ == "__main__":
         portas()
     elif a[:2] == ["portas", "encerrar"] and len(a) == 3:
         sys.exit(encerrar(a[2]))
+    elif a[:2] == ["cofre", "listar"]:
+        cofre_listar()
+    elif a[:2] == ["cofre", "guardar"] and len(a) == 3:
+        sys.exit(0 if cofre_guardar(a[2], sys.stdin.read()) else 1)
+    elif a[:2] == ["cofre", "ler"] and len(a) == 3:
+        print(cofre_ler(a[2]), end="")
+    elif a[:2] == ["cofre", "remover"] and len(a) == 3:
+        cofre_remover(a[2])
+    elif a[:2] == ["ssh", "hosts"]:
+        ssh_hosts()
+    elif a[:2] == ["ssh", "adicionar"] and len(a) in (6, 7):
+        sys.exit(ssh_adicionar(*a[2:]))
+    elif a[:2] == ["ssh", "remover"] and len(a) == 3:
+        sys.exit(ssh_remover(a[2]))
+    elif a[:2] == ["ssh", "chaves"]:
+        ssh_chaves()
+    elif a[:2] == ["ssh", "gerar"] and len(a) == 4:
+        sys.exit(ssh_gerar(a[2], a[3]))
+    elif a[:2] == ["ssh", "tuneis"]:
+        ssh_tuneis()
+    elif a[:2] == ["ssh", "tunel"] and len(a) == 5:
+        sys.exit(ssh_tunel(*a[2:]))
+    elif a[:2] == ["ssh", "fechar"] and len(a) == 3:
+        sys.exit(encerrar(a[2]))
+    elif a[:3] in (["ssh", "servidor", "estado"], ["ssh", "servidor", "ligar"], ["ssh", "servidor", "desligar"]):
+        sys.exit(ssh_servidor(a[2]))
     else:
         print(__doc__)
         sys.exit(2)

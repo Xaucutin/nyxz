@@ -12,7 +12,9 @@ ShellRoot {
 
     readonly property var paginas: [
         { id: "bancos", nome: "Bancos locais" },
-        { id: "portas", nome: "Portas em uso" }
+        { id: "portas", nome: "Portas em uso" },
+        { id: "ssh", nome: "SSH" },
+        { id: "cofre", nome: "Cofre" }
     ]
     property int atual: 0
 
@@ -139,7 +141,7 @@ ShellRoot {
                         active: ativa
                         opacity: ativa ? 1 : 0
                         source: {
-                            const mapa = { bancos: "PaginaBancos.qml", portas: "PaginaPortas.qml" };
+                            const mapa = { bancos: "PaginaBancos.qml", portas: "PaginaPortas.qml", ssh: "PaginaSsh.qml", cofre: "PaginaCofre.qml" };
                             return mapa[modelData.id];
                         }
                         transform: Translate { y: ativa ? 0 : 10 }

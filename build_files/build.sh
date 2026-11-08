@@ -183,6 +183,9 @@ systemctl enable greetd.service
 systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl enable nyxz-atualizar.timer nyxz-migracoes.service
+# Servidor SSH desligado por padrão: num computador pessoal, a porta 22 aberta na rede
+# é risco à toa. Liga pelo Dev Hub → SSH quando precisar.
+systemctl disable sshd.service sshd.socket 2>/dev/null || true
 # Serviços de usuário da Nyxz: ligados para todos os usuários, sobem com a sessão gráfica.
 systemctl --global enable nyxz-scoped.service
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
