@@ -88,13 +88,19 @@ PanelWindow {
                         readonly property var ws: Hyprland.workspaces.values.find(w => w.id === numero)
                         readonly property bool ativo: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === numero
                         readonly property bool ocupado: ws !== undefined && ws.toplevels.values.length > 0
-                        width: 24
+                        // Espaço com nome (Configurações → Espaços): mostra o nome no lugar do número
+                        readonly property string nome: Espacos.nome(numero)
+                        width: nome ? rotuloEspaco.implicitWidth + 16 : 24
                         height: 30
+                        Behavior on width {
+                            NumberAnimation { duration: Tema.medio; easing.type: Easing.BezierSpline; easing.bezierCurve: Tema.curva }
+                        }
 
                         Text {
+                            id: rotuloEspaco
                             anchors.centerIn: parent
-                            text: parent.numero
-                            font.family: Tema.fonteMono
+                            text: parent.nome || parent.numero
+                            font.family: parent.nome ? Tema.fonte : Tema.fonteMono
                             font.pixelSize: 12
                             color: parent.ativo ? Tema.texto : parent.ocupado ? "#8A8894" : Tema.texto4
                             Behavior on color { ColorAnimation { duration: Tema.rapido } }

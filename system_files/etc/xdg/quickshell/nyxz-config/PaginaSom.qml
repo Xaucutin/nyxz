@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Services.Pipewire
 
 // Som: dispositivo de saída e de entrada, com volume de cada um.
@@ -12,6 +13,18 @@ Pagina {
     readonly property var entradas: Pipewire.nodes.values.filter(n => n.audio && !n.isSink && !n.isStream)
 
     PwObjectTracker { objects: p.saidas.concat(p.entradas) }
+
+    // Perfis do nyxz-audio
+    property var perfis: []
+    Comando {
+        id: estadoAudio
+        onPronto: saida => { try { p.perfis = JSON.parse(saida).perfis || []; } catch (e) { p.perfis = []; } }
+        Component.onCompleted: rodar(["/usr/libexec/nyxz/nyxz-audio", "estado"])
+    }
+    Comando {
+        id: acaoAudio
+        onPronto: estadoAudio.rodar(["/usr/libexec/nyxz/nyxz-audio", "estado"])
+    }
 
     component Dispositivo: Rectangle {
         id: disp
@@ -115,5 +128,72 @@ Pagina {
         font.family: Tema.fonte
         font.pixelSize: 13
         color: Tema.texto3
+    }
+
+    // ---------------------------------------------- perfis de som
+    Text {
+        Layout.topMargin: 18
+        text: "Perfis"
+        font.family: Tema.fonte; font.pixelSize: 12; font.weight: Font.Medium; color: Tema.texto3
+    }
+    Text {
+        Layout.fillWidth: true
+        text: "Um perfil guarda a saída, o microfone, o volume e o \"sem ruído\" de agora. Depois, um clique no painel de som da barra volta tudo de uma vez."
+        wrapMode: Text.Wrap
+        font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto3
+    }
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
+            radius: Tema.raio
+            color: Tema.elevado
+            border.width: 1
+            border.color: nomePerfil.activeFocus ? Tema.texto4 : Tema.borda
+            TextInput {
+                id: nomePerfil
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                verticalAlignment: TextInput.AlignVCenter
+                maximumLength: 24
+                font.family: Tema.fonte; font.pixelSize: 13; color: Tema.texto
+                clip: true
+                Keys.onReturnPressed: salvar.clicado()
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: nomePerfil.text.length === 0
+                    text: "Nome do perfil (ex.: Call, Jogo, Música)"
+                    font: nomePerfil.font
+                    color: Tema.texto4
+                }
+            }
+        }
+        Botao {
+            id: salvar
+            texto: "Salvar o som de agora"
+            principal: true
+            ativo: nomePerfil.text.trim().length > 0
+            onClicado: {
+                acaoAudio.rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "salvar", nomePerfil.text.trim()]);
+                nomePerfil.text = "";
+            }
+        }
+    }
+    Repeater {
+        model: p.perfis
+        delegate: RowLayout {
+            required property string modelData
+            Layout.fillWidth: true
+            Text {
+                Layout.fillWidth: true
+                text: modelData
+                font.family: Tema.fonte; font.pixelSize: 13; color: Tema.suave
+            }
+            Botao { texto: "Aplicar"; onClicado: acaoAudio.rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "aplicar", modelData]) }
+            Botao { texto: "Remover"; onClicado: acaoAudio.rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "remover", modelData]) }
+        }
     }
 }

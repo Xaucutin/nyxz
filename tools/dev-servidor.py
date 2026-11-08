@@ -56,7 +56,7 @@ ROTAS = {
     ]),
     # Scripts e dados de /usr (nyx dev usr): vão para um /usr temporário (bootc usr-overlay)
     "/usr.tgz": lambda: empacotar([
-        (RAIZ / "system_files" / "usr", lambda r: r.startswith(("libexec/nyxz/", "share/nyxz/", "share/kio/", "bin/"))),
+        (RAIZ / "system_files" / "usr", lambda r: r.startswith(("libexec/nyxz/", "share/nyxz/", "share/kio/", "bin/", "lib/systemd/user/"))),
     ]),
 }
 

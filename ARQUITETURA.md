@@ -41,6 +41,7 @@ Serviço de usuário pequeno (Rust) que acompanha escopos (criados e encerrados)
 ### 2.4 `nyxz-audio`: um único dono do roteamento de som
 - Painel de som, perfis, automações, Modo jogo e Nyxz Share **não mexem no PipeWire direto**: pedem ao `nyxz-audio`, que grava regras do WirePlumber e cria os filtros.
 - Evita duas funções trocando a saída de um app ao mesmo tempo.
+- **Como ficou (08/11/2026):** em vez de serviço residente, o `nyxz-audio` é um comando único (`/usr/libexec/nyxz/nyxz-audio`): estado, microfone sem ruído (módulo echo-cancel do PipeWire com WebRTC, numa instância própria que só existe enquanto ligado), saída por app (`target.object`, lembrada pelo WirePlumber) e perfis. Mesmo papel de "único dono", custo zero parado.
 
 ### 2.5 Configuração em camadas (evita sobrescrever o usuário)
 ```

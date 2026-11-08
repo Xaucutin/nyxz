@@ -17,6 +17,7 @@ ShellRoot {
         { id: "aparencia", nome: "Aparência" },
         { id: "ajustes", nome: "Ajustes" },
         { id: "regras", nome: "Regras de janela" },
+        { id: "espacos", nome: "Espaços" },
         { id: "componentes", nome: "Apps e componentes" },
         { id: "datahora", nome: "Data e hora" },
         { id: "atualizacoes", nome: "Atualizações" },
@@ -148,7 +149,7 @@ ShellRoot {
                         opacity: ativa ? 1 : 0
                         source: {
                             const mapa = { rede: "PaginaRede.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
-                                           teclado: "PaginaTeclado.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", componentes: "PaginaComponentes.qml", datahora: "PaginaDataHora.qml",
+                                           teclado: "PaginaTeclado.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", componentes: "PaginaComponentes.qml", datahora: "PaginaDataHora.qml",
                                            atualizacoes: "PaginaAtualizacoes.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];
                         }

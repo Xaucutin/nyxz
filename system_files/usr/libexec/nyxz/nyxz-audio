@@ -1,0 +1,166 @@
+#!/usr/bin/python3 -I
+"""nyxz-audio — único dono das mudanças de som da Nyxz (ARQUITETURA.md, 2.4).
+
+Não fica rodando: o painel de som, as Configurações, os perfis e (no futuro) as
+automações e o Modo jogo chamam este comando, que fala com o PipeWire/WirePlumber.
+
+  nyxz-audio estado                         JSON: saídas, entradas, padrões, supressão, perfis
+  nyxz-audio supressao ligar|desligar       microfone sem ruído (WebRTC do próprio PipeWire)
+  nyxz-audio saida-app <id-do-stream> <nome-da-saída>
+  nyxz-audio perfil salvar <nome>           guarda saída, entrada, volume e supressão atuais
+  nyxz-audio perfil aplicar <nome>
+  nyxz-audio perfil remover <nome>
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+PERFIS = Path.home() / ".config/nyxz/som-perfis.json"
+SERVICO = "nyxz-supressao.service"
+MIC_LIMPO = "nyxz_mic_limpo"
+
+
+def rodar(cmd):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return r.returncode, r.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+
+
+def nos():
+    """Nós de áudio do PipeWire (pw-dump), com id, nome, descrição e classe."""
+    codigo, saida = rodar(["pw-dump"])
+    if codigo != 0:
+        return [], {}
+    objetos = json.loads(saida or "[]")
+    lista, padroes = [], {}
+    for o in objetos:
+        tipo = o.get("type", "")
+        if tipo == "PipeWire:Interface:Node":
+            p = o.get("info", {}).get("props", {})
+            lista.append({"id": o["id"], "nome": p.get("node.name", ""),
+                          "descricao": p.get("node.description") or p.get("node.nick") or p.get("node.name", ""),
+                          "classe": p.get("media.class", "")})
+        elif tipo == "PipeWire:Interface:Metadata" and o.get("props", {}).get("metadata.name") == "default":
+            for m in o.get("metadata", []) or []:
+                if m.get("key") in ("default.audio.sink", "default.audio.source"):
+                    valor = m.get("value") or {}
+                    padroes[m["key"]] = valor.get("name", "") if isinstance(valor, dict) else ""
+    return lista, padroes
+
+
+def id_por_nome(nome):
+    return next((n["id"] for n in nos()[0] if n["nome"] == nome), None)
+
+
+def supressao_ligada():
+    return rodar(["systemctl", "--user", "is-active", "--quiet", SERVICO])[0] == 0
+
+
+def volume(id_):
+    codigo, saida = rodar(["wpctl", "get-volume", str(id_)])
+    try:
+        return float(saida.split()[1]) if codigo == 0 else 1.0
+    except (IndexError, ValueError):
+        return 1.0
+
+
+def ler_perfis():
+    try:
+        return json.loads(PERFIS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def gravar_perfis(perfis):
+    PERFIS.parent.mkdir(parents=True, exist_ok=True)
+    PERFIS.write_text(json.dumps(perfis, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def estado():
+    lista, padroes = nos()
+    print(json.dumps({
+        "saidas": [n for n in lista if n["classe"] == "Audio/Sink"],
+        "entradas": [n for n in lista if n["classe"] == "Audio/Source" and n["nome"] != MIC_LIMPO],
+        "saidaPadrao": padroes.get("default.audio.sink", ""),
+        "entradaPadrao": padroes.get("default.audio.source", ""),
+        "supressao": supressao_ligada(),
+        "perfis": [p["nome"] for p in ler_perfis()],
+    }, ensure_ascii=False))
+
+
+def supressao(ligar):
+    if ligar:
+        rodar(["systemctl", "--user", "start", SERVICO])
+        # Espera o microfone limpo aparecer e o deixa como padrão
+        for _ in range(20):
+            id_ = id_por_nome(MIC_LIMPO)
+            if id_ is not None:
+                rodar(["wpctl", "set-default", str(id_)])
+                return 0
+            time.sleep(0.25)
+        return 1
+    rodar(["systemctl", "--user", "stop", SERVICO])
+    return 0
+
+
+def saida_app(stream, saida):
+    # O WirePlumber lembra a escolha por app (restore-stream).
+    codigo, _ = rodar(["pw-metadata", str(stream), "target.object", saida])
+    return codigo
+
+
+def perfil(acao, nome):
+    perfis = [p for p in ler_perfis() if p["nome"] != nome]
+    if acao == "remover":
+        gravar_perfis(perfis)
+        return 0
+    if acao == "salvar":
+        lista, padroes = nos()
+        saida = padroes.get("default.audio.sink", "")
+        id_saida = next((n["id"] for n in lista if n["nome"] == saida), None)
+        entrada = padroes.get("default.audio.source", "")
+        perfis.append({
+            "nome": nome,
+            "saida": saida,
+            "entrada": "" if entrada == MIC_LIMPO else entrada,
+            "volume": round(volume(id_saida), 2) if id_saida is not None else 1.0,
+            "supressao": supressao_ligada(),
+        })
+        gravar_perfis(perfis)
+        return 0
+    if acao == "aplicar":
+        p = next((x for x in ler_perfis() if x["nome"] == nome), None)
+        if not p:
+            print(f"Perfil não encontrado: {nome}", file=sys.stderr)
+            return 1
+        id_saida = id_por_nome(p.get("saida", ""))
+        if id_saida is not None:
+            rodar(["wpctl", "set-default", str(id_saida)])
+            rodar(["wpctl", "set-volume", str(id_saida), str(p.get("volume", 1.0))])
+        id_entrada = id_por_nome(p.get("entrada", ""))
+        if id_entrada is not None:
+            rodar(["wpctl", "set-default", str(id_entrada)])
+        # A supressão por último: ela vira o microfone padrão quando liga.
+        supressao(bool(p.get("supressao")))
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a[0] == "supressao" and len(a) == 2:
+        sys.exit(supressao(a[1] == "ligar"))
+    elif a[0] == "saida-app" and len(a) == 3:
+        sys.exit(saida_app(a[1], a[2]))
+    elif a[0] == "perfil" and len(a) == 3 and a[1] in ("salvar", "aplicar", "remover"):
+        sys.exit(perfil(a[1], a[2]))
+    else:
+        print(__doc__)
+        sys.exit(2)

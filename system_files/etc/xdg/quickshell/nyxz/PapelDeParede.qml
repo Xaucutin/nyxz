@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Wayland
 
 // Fundo da área de trabalho em cada monitor.
@@ -11,6 +12,12 @@ import Quickshell.Wayland
 // Configurações ou pelo Dolphin, via /usr/libexec/nyxz/papel-de-parede).
 Scope {
     id: raiz
+
+    // Espaço com papel de parede próprio (Configurações → Espaços) vence o geral.
+    readonly property int espacoAtual: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
+    readonly property string papelDoEspaco: Espacos.papel(espacoAtual)
+    readonly property string tipo: papelDoEspaco ? "imagem" : cfg.tipo
+    readonly property string arquivoAtual: papelDoEspaco || cfg.arquivo
 
     FileView {
         id: arquivo
@@ -39,14 +46,14 @@ Scope {
             WlrLayershell.layer: WlrLayer.Background
             WlrLayershell.namespace: "nyxz-papel-de-parede"
             // Com vídeo, o mpvpaper desenha por baixo: esta janela some.
-            visible: cfg.tipo !== "video"
+            visible: raiz.tipo !== "video"
             color: Tema.fundo
 
             Image {
                 id: imagem
                 anchors.fill: parent
-                visible: cfg.tipo === "imagem"
-                source: cfg.tipo === "imagem" && cfg.arquivo ? "file://" + cfg.arquivo : ""
+                visible: raiz.tipo === "imagem"
+                source: raiz.tipo === "imagem" && raiz.arquivoAtual ? "file://" + raiz.arquivoAtual : ""
                 asynchronous: true
                 cache: false
                 // Decodifica no tamanho da tela, não no tamanho original do arquivo (RAM).

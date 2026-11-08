@@ -1,0 +1,10 @@
+[Unit]
+Description=Nyxz: microfone sem ruído (PipeWire, WebRTC)
+After=pipewire.service wireplumber.service
+Requires=pipewire.service
+
+[Service]
+ExecStart=/usr/bin/pipewire -c /usr/share/nyxz/pipewire/supressao.conf
+Restart=on-failure
+# Pequeno e só existe enquanto ligado
+MemoryMax=64M

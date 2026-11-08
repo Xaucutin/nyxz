@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Pipewire
@@ -41,6 +42,22 @@ PanelWindow {
         return p["application.name"] || n.description || n.name;
     }
 
+    // nyxz-audio: perfis e microfone sem ruído (lido ao abrir o painel)
+    property var audio: ({ perfis: [], supressao: false })
+    onVisibleChanged: if (visible) lerAudio.running = true
+    Process {
+        id: lerAudio
+        command: ["/usr/libexec/nyxz/nyxz-audio", "estado"]
+        stdout: StdioCollector {
+            onStreamFinished: { try { painel.audio = JSON.parse(this.text); } catch (e) {} }
+        }
+    }
+    function nyxzAudio(args) {
+        Quickshell.execDetached(["/usr/libexec/nyxz/nyxz-audio"].concat(args));
+        releitura.restart();
+    }
+    Timer { id: releitura; interval: 900; onTriggered: lerAudio.running = true }
+
     PwObjectTracker {
         objects: painel.saidas.concat(painel.apps).concat(painel.microfone ? [painel.microfone] : [])
     }
@@ -74,6 +91,38 @@ PanelWindow {
                 font.pixelSize: 14
                 font.weight: Font.Medium
                 color: Tema.texto
+            }
+
+            // Perfis (ex.: Call, Jogo): um clique troca saída, microfone, volume e supressão
+            Flow {
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                spacing: 6
+                visible: painel.audio.perfis !== undefined && painel.audio.perfis.length > 0
+                Repeater {
+                    model: painel.audio.perfis || []
+                    delegate: Rectangle {
+                        required property string modelData
+                        width: rotuloPerfil.implicitWidth + 20
+                        height: 26
+                        radius: 13
+                        color: areaPerfil.containsMouse ? Tema.hover : Tema.elevado
+                        border.width: 1
+                        border.color: Tema.borda
+                        Text {
+                            id: rotuloPerfil
+                            anchors.centerIn: parent
+                            text: parent.modelData
+                            font.family: Tema.fonte; font.pixelSize: 12; color: Tema.suave
+                        }
+                        MouseArea {
+                            id: areaPerfil
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: painel.nyxzAudio(["perfil", "aplicar", parent.modelData])
+                        }
+                    }
+                }
             }
 
             Rotulo { texto: "Saída" }
@@ -126,19 +175,69 @@ PanelWindow {
             Repeater {
                 model: painel.apps
                 delegate: ColumnLayout {
+                    id: linhaApp
                     required property var modelData
+                    property bool escolhendo: false
                     Layout.fillWidth: true
                     spacing: 4
-                    Text {
+                    RowLayout {
+                        Layout.fillWidth: true
                         Layout.leftMargin: 10
-                        text: painel.nomeApp(parent.modelData)
-                        font.family: Tema.fonte
-                        font.pixelSize: 13
-                        color: Tema.suave
-                        elide: Text.ElideRight
+                        Layout.rightMargin: 10
+                        Text {
+                            Layout.fillWidth: true
+                            text: painel.nomeApp(linhaApp.modelData)
+                            font.family: Tema.fonte
+                            font.pixelSize: 13
+                            color: Tema.suave
+                            elide: Text.ElideRight
+                        }
+                        // Saída de áudio só deste app (o WirePlumber lembra por app)
+                        Text {
+                            visible: painel.saidas.length > 1
+                            text: linhaApp.escolhendo ? "Fechar" : "Saída…"
+                            font.family: Tema.fonte
+                            font.pixelSize: 11
+                            color: areaSaidaApp.containsMouse ? Tema.texto : Tema.texto3
+                            MouseArea {
+                                id: areaSaidaApp
+                                anchors.fill: parent
+                                anchors.margins: -4
+                                hoverEnabled: true
+                                onClicked: linhaApp.escolhendo = !linhaApp.escolhendo
+                            }
+                        }
+                    }
+                    Repeater {
+                        model: linhaApp.escolhendo ? painel.saidas : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 18
+                            Layout.rightMargin: 10
+                            Layout.preferredHeight: 28
+                            radius: 6
+                            color: areaOpcaoSaida.containsMouse ? Tema.hover : "transparent"
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.leftMargin: 8
+                                text: parent.modelData.description || parent.modelData.name
+                                font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto2
+                            }
+                            MouseArea {
+                                id: areaOpcaoSaida
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    painel.nyxzAudio(["saida-app", String(linhaApp.modelData.id), parent.modelData.name]);
+                                    linhaApp.escolhendo = false;
+                                }
+                            }
+                        }
                     }
                     LinhaVolume {
-                        no: parent.modelData
+                        no: linhaApp.modelData
                         icone: "icones/volume.svg"
                     }
                 }
@@ -157,6 +256,36 @@ PanelWindow {
                 visible: painel.microfone !== null
                 no: painel.microfone
                 icone: "icones/microfone.svg"
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 10
+                Layout.rightMargin: 10
+                Layout.topMargin: 2
+                visible: painel.microfone !== null
+                Text {
+                    Layout.fillWidth: true
+                    text: "Sem ruído (tira barulho de fundo e eco)"
+                    font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto2
+                }
+                Rectangle {
+                    implicitWidth: 34
+                    implicitHeight: 20
+                    radius: 10
+                    color: painel.audio.supressao ? Tema.suave : Tema.trilho
+                    Rectangle {
+                        width: 14; height: 14; radius: 7
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: painel.audio.supressao ? parent.width - width - 3 : 3
+                        color: painel.audio.supressao ? Tema.fundo : Tema.texto3
+                        Behavior on x { NumberAnimation { duration: Tema.medio; easing.type: Easing.BezierSpline; easing.bezierCurve: Tema.curva } }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        onClicked: painel.nyxzAudio(["supressao", painel.audio.supressao ? "desligar" : "ligar"])
+                    }
+                }
             }
         }
     }
