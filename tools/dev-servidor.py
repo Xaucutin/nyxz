@@ -31,8 +31,14 @@ def empacotar(pastas) -> bytes:
                     info.mode = 0o755 if rel.startswith(("libexec/", "bin/")) else 0o644
                     info.uid = info.gid = 0
                     info.uname = info.gname = "root"
-                    with open(arq, "rb") as f:
-                        tar.addfile(info, f)
+                    dados = arq.read_bytes()
+                    # Arquivos de texto editados no Windows podem ter fim de linha CRLF: no
+                    # Linux, a primeira linha "#!/usr/bin/python3 -I" + CR quebra o script.
+                    # Imagens ficam intactas.
+                    if arq.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svgz"):
+                        dados = dados.replace(bytes([13, 10]), bytes([10]))
+                    info.size = len(dados)
+                    tar.addfile(info, io.BytesIO(dados))
     return buf.getvalue()
 
 

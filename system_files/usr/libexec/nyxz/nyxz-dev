@@ -457,12 +457,16 @@ def ssh_tunel(host, local, remota):
 
 
 def ssh_servidor(acao):
+    # O Fedora pode ouvir a porta 22 pelo sshd.socket (o serviço só sobe na 1ª conexão):
+    # "ligado" = qualquer um dos dois ativo; ligar/desligar mexe nos dois.
     if acao == "estado":
-        ativo = rodar(["systemctl", "is-active", "--quiet", "sshd.service"])[0] == 0
+        ativo = any(rodar(["systemctl", "is-active", "--quiet", u])[0] == 0 for u in ("sshd.service", "sshd.socket"))
         print(json.dumps({"ativo": ativo}))
         return 0
-    cmd = ["enable", "--now"] if acao == "ligar" else ["disable", "--now"]
-    codigo, saida = rodar(["pkexec", "systemctl", *cmd, "sshd.service"])
+    if acao == "ligar":
+        codigo, saida = rodar(["pkexec", "systemctl", "enable", "--now", "sshd.service"])
+    else:
+        codigo, saida = rodar(["pkexec", "systemctl", "disable", "--now", "sshd.socket", "sshd.service"])
     if codigo != 0:
         print("Não foi possível mudar o servidor SSH (senha cancelada?).", file=sys.stderr)
     return codigo
