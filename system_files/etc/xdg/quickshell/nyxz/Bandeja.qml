@@ -13,6 +13,9 @@ RowLayout {
     property var janelaBarra: null
     property bool emCima: false
     spacing: 0
+    // Layout dentro de layout estica por padrão: a bandeja ocupava o espaço livre
+    // da barra e empurrava o indicador de privacidade para o meio.
+    Layout.fillWidth: false
 
     FileView {
         path: Quickshell.env("HOME") + "/.config/nyxz/bandeja.json"

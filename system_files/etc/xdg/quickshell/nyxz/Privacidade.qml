@@ -24,7 +24,11 @@ Item {
 
     function proprio(n) {
         const p = n.properties || {};
-        // Medidores do próprio shell (painel de som) não contam.
+        // Não contam: medidores do próprio shell e a captura do "microfone sem ruído"
+        // (nyxz-audio), que fica ligada enquanto o filtro existe. Contam os apps que
+        // usam o microfone limpo.
+        const nome = n.name || "";
+        if (nome.indexOf("nyxz_mic_") === 0 || nome.indexOf("echo-cancel") === 0) return true;
         return (p["application.name"] || "").toLowerCase().indexOf("quickshell") >= 0;
     }
     function nomeApp(n) {

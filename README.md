@@ -49,7 +49,9 @@ Também feitos: **Ajustes** (Configurações → Ajustes, com busca: mini player
 
 Também feitos: **bandeja** com fixar/ocultar (seta com os ícones ocultos e alfinete por app) e **Regras de janela** (Configurações → Regras de janela: a partir das janelas abertas; área de trabalho, flutuante, centralizada, tela cheia e opacidade; também no botão direito do app na barra). A janela de Configurações agora cabe em telas pequenas. Conferido na VM: página de regras listando as janelas abertas e o formato das regras aplicado no Hyprland (janela flutuante, centralizada e 90% de opacidade).
 
-**Pendentes da Fase 3:** conferir a bandeja com um app que tenha ícone (Discord, Steam); espaços com nome; serviço `nyxz-audio` (perfis de som).
+Também feitos e conferidos na VM (imagem 2081d44): **espaços com nome** (a barra mostra "Código", "Jogos"…; papel de parede próprio por espaço, trocando ao mudar), **nyxz-audio** (microfone sem ruído com o WebRTC do PipeWire, saída por app, perfis como "Call" em um clique no painel de som; gestão em Configurações → Som), **luz azul** (hyprsunset ou, sem ele, gammastep) e **mpvpaper** compilado na imagem. O indicador de privacidade ignora o próprio filtro de ruído. RAM com o filtro de ruído ligado: 697 MB.
+
+**Pendentes da Fase 3:** conferir a bandeja com um app que tenha ícone (Discord, Steam); conferir o papel de parede em vídeo com um arquivo de vídeo; conferir o brilho num monitor com DDC/CI.
 
 **Testes na VM:** com desenho por software, a prévia ao vivo tomava o processador e a digitação pelo VBoxManage embaralhava (agora ela atualiza 2x por segundo nesse caso). Voltar do tty para a sessão gráfica deixa a tela congelada no VirtualBox; para comandar a sessão a partir do tty, use `hyprctl -i 0 dispatch 'hl.dsp.exec_cmd("...")'`.
 
