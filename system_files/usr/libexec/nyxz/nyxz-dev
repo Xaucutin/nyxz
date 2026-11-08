@@ -30,6 +30,16 @@ SSH:
   nyxz-dev ssh fechar <pid>
   nyxz-dev ssh servidor estado|ligar|desligar             servidor SSH deste computador
 
+Discord Studio (bots em ~/Projetos/Discord/<nome>; token no cofre como discord-<nome>):
+  nyxz-dev discord bots                                   JSON: bots e linguagem
+  nyxz-dev discord criar <nome> js|py
+  nyxz-dev discord token <nome>                           token pela entrada padrão (vai para o cofre)
+  nyxz-dev discord servidor-teste <nome> <id>             ID do servidor de testes (comandos na hora)
+  nyxz-dev discord rodar <nome>                           roda com logs e reinicia ao salvar (primeiro plano)
+  nyxz-dev discord iniciar|parar <nome>                   em segundo plano (serviço nyxz-bot-<nome>)
+  nyxz-dev discord logs <nome>                            últimas linhas do bot
+  nyxz-dev discord webhook <nome-no-cofre>                envia o JSON da entrada padrão
+
 Progresso (criar): linhas "PASSO|texto" e "LOG|texto"; última: "FIM|ok" ou "FIM|erro|mensagem".
 """
 import json
@@ -472,6 +482,300 @@ def ssh_servidor(acao):
     return codigo
 
 
+# ------------------------------------------------------------------ Discord Studio
+
+BOTS = Path.home() / "Projetos" / "Discord"
+SHIMS = Path.home() / ".local/share/mise/shims"
+
+MODELO_JS = {
+    "package.json": """{
+  "name": "%(nome)s",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "dependencies": { "discord.js": "^14.16.0" }
+}
+""",
+    "index.js": """import { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Events } from "discord.js";
+
+// O token vem do cofre da Nyxz (variável DISCORD_TOKEN). Nunca escreva o token aqui.
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+const comandos = [
+  new SlashCommandBuilder().setName("ping").setDescription("Responde com pong e a latência"),
+  new SlashCommandBuilder().setName("exemplo").setDescription("Mostra um embed de exemplo"),
+];
+
+client.once(Events.ClientReady, async (c) => {
+  console.log(`Conectado como ${c.user.tag}`);
+  const servidor = process.env.DISCORD_GUILD_ID;
+  if (servidor) {
+    await c.application.commands.set(comandos, servidor);
+    console.log(`Comandos registrados no servidor de testes ${servidor}`);
+  } else {
+    await c.application.commands.set(comandos);
+    console.log("Comandos registrados (globais: podem levar até 1 hora para aparecer)");
+  }
+});
+
+client.on(Events.InteractionCreate, async (i) => {
+  if (!i.isChatInputCommand()) return;
+  if (i.commandName === "ping") {
+    await i.reply(`Pong! ${client.ws.ping} ms`);
+  } else if (i.commandName === "exemplo") {
+    const embed = new EmbedBuilder()
+      .setTitle("Olá da Nyxz")
+      .setDescription("Edite este embed no **Dev Hub → Embeds** e cole o código aqui.")
+      .setColor(0x5865f2);
+    await i.reply({ embeds: [embed] });
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN);
+""",
+}
+
+MODELO_PY = {
+    "requirements.txt": "discord.py>=2.4\n",
+    "bot.py": """import os
+
+import discord
+from discord import app_commands
+
+# O token vem do cofre da Nyxz (variável DISCORD_TOKEN). Nunca escreva o token aqui.
+client = discord.Client(intents=discord.Intents.default())
+arvore = app_commands.CommandTree(client)
+
+
+@arvore.command(name="ping", description="Responde com pong e a latência")
+async def ping(i: discord.Interaction):
+    await i.response.send_message(f"Pong! {round(client.latency * 1000)} ms")
+
+
+@arvore.command(name="exemplo", description="Mostra um embed de exemplo")
+async def exemplo(i: discord.Interaction):
+    embed = discord.Embed(
+        title="Olá da Nyxz",
+        description="Edite este embed no **Dev Hub → Embeds** e cole o código aqui.",
+        color=0x5865F2,
+    )
+    await i.response.send_message(embed=embed)
+
+
+@client.event
+async def on_ready():
+    servidor = os.environ.get("DISCORD_GUILD_ID")
+    if servidor:
+        alvo = discord.Object(id=int(servidor))
+        arvore.copy_global_to(guild=alvo)
+        await arvore.sync(guild=alvo)
+        print(f"Comandos registrados no servidor de testes {servidor}")
+    else:
+        await arvore.sync()
+        print("Comandos registrados (globais: podem levar até 1 hora para aparecer)")
+    print(f"Conectado como {client.user}")
+
+
+client.run(os.environ["DISCORD_TOKEN"])
+""",
+}
+
+COMUNS = {
+    ".gitignore": "node_modules/\n.venv/\n__pycache__/\n.env\n",
+    ".env.example": "# O Dev Hub injeta estas variáveis ao rodar (o token fica no cofre).\nDISCORD_TOKEN=\nDISCORD_GUILD_ID=\n",
+}
+
+
+def meta_bot(pasta):
+    try:
+        return json.loads((pasta / ".nyxz-bot.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def discord_bots():
+    lista = []
+    for pasta in sorted(BOTS.iterdir()) if BOTS.exists() else []:
+        m = meta_bot(pasta)
+        if m:
+            lista.append({**m, "pasta": str(pasta), "temToken": bool(cofre_ler(f"discord-{m['nome']}")),
+                          "rodando": bot_rodando(m["nome"])})
+    print(json.dumps(lista, ensure_ascii=False))
+
+
+def discord_criar(nome, ling):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", nome) or ling not in ("js", "py"):
+        print("Nome inválido (minúsculas, números, - e _) ou linguagem diferente de js/py.", file=sys.stderr)
+        return 1
+    pasta = BOTS / nome
+    if pasta.exists():
+        print(f"Já existe uma pasta {pasta}.", file=sys.stderr)
+        return 1
+    pasta.mkdir(parents=True)
+    for nome_arq, conteudo in {**(MODELO_JS if ling == "js" else MODELO_PY), **COMUNS}.items():
+        (pasta / nome_arq).write_text(conteudo.replace("%(nome)s", nome), encoding="utf-8")
+    (pasta / ".nyxz-bot.json").write_text(json.dumps({"nome": nome, "linguagem": ling, "servidorTeste": ""}), encoding="utf-8")
+    rodar(["git", "init", "-q", str(pasta)])
+    return 0
+
+
+def discord_servidor_teste(nome, ident):
+    pasta = BOTS / nome
+    m = meta_bot(pasta)
+    if not m or not re.fullmatch(r"[0-9]{0,22}", ident):
+        return 1
+    m["servidorTeste"] = ident
+    (pasta / ".nyxz-bot.json").write_text(json.dumps(m), encoding="utf-8")
+    return 0
+
+
+def arquivos_vigiados(pasta, ling):
+    ext = ".js" if ling == "js" else ".py"
+    for raiz, dirs, nomes in os.walk(pasta):
+        dirs[:] = [d for d in dirs if d not in ("node_modules", ".venv", "__pycache__", ".git")]
+        for n in nomes:
+            if n.endswith(ext) or n in ("package.json", "requirements.txt"):
+                yield os.path.join(raiz, n)
+
+
+def assinatura(pasta, ling):
+    total = 0.0
+    for a in arquivos_vigiados(pasta, ling):
+        try:
+            total += os.stat(a).st_mtime
+        except OSError:
+            pass
+    return total
+
+
+def discord_rodar(nome):
+    import threading
+    pasta = BOTS / nome
+    m = meta_bot(pasta)
+    if not m:
+        fim(False, f"Bot {nome} não encontrado.")
+    token = cofre_ler(f"discord-{nome}")
+    if not token:
+        fim(False, "Guarde o token do bot primeiro (botão Token).")
+    env = dict(os.environ, DISCORD_TOKEN=token.strip(), PYTHONUNBUFFERED="1",
+               PATH=f"{SHIMS}:{os.environ.get('PATH', '')}")
+    if m.get("servidorTeste"):
+        env["DISCORD_GUILD_ID"] = m["servidorTeste"]
+    ling = m["linguagem"]
+    if ling == "js":
+        if not shutil.which("node", path=env["PATH"]):
+            fim(False, "Instale o Node.js em Configurações → Apps e componentes → Desenvolvimento.")
+        if not (pasta / "node_modules").exists():
+            passo("Instalando as dependências (npm install)")
+            if subprocess.run(["npm", "install", "--no-fund", "--no-audit"], cwd=pasta, env=env,
+                              stdout=sys.stdout, stderr=subprocess.STDOUT).returncode != 0:
+                fim(False, "O npm install falhou.")
+        cmd = ["node", "index.js"]
+    else:
+        python = shutil.which("python3", path=env["PATH"]) or "/usr/bin/python3"
+        venv = pasta / ".venv"
+        if not venv.exists():
+            passo("Criando o ambiente Python e instalando o discord.py")
+            if subprocess.run([python, "-m", "venv", str(venv)], cwd=pasta).returncode != 0 or \
+               subprocess.run([str(venv / "bin/pip"), "install", "-q", "-r", "requirements.txt"], cwd=pasta, env=env,
+                              stdout=sys.stdout, stderr=subprocess.STDOUT).returncode != 0:
+                fim(False, "A instalação do discord.py falhou.")
+        cmd = [str(venv / "bin/python"), "bot.py"]
+
+    filho = {"p": None}
+
+    def parar(*_):
+        if filho["p"] and filho["p"].poll() is None:
+            filho["p"].terminate()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, parar)
+    signal.signal(signal.SIGINT, parar)
+
+    def ler(p):
+        for linha in p.stdout:
+            print(f"LOG|{linha.rstrip()}", flush=True)
+
+    while True:
+        passo("Rodando (salve um arquivo para reiniciar)")
+        filho["p"] = subprocess.Popen(cmd, cwd=pasta, env=env, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, text=True)
+        threading.Thread(target=ler, args=(filho["p"],), daemon=True).start()
+        marca = assinatura(pasta, ling)
+        avisou = False
+        while True:
+            time.sleep(1)
+            if assinatura(pasta, ling) != marca:
+                passo("Arquivo salvo: reiniciando o bot")
+                if filho["p"].poll() is None:
+                    filho["p"].terminate()
+                    try:
+                        filho["p"].wait(5)
+                    except subprocess.TimeoutExpired:
+                        filho["p"].kill()
+                break
+            if filho["p"].poll() is not None and not avisou:
+                passo(f"O bot parou (código {filho['p'].returncode}). Salve um arquivo para tentar de novo.")
+                avisou = True
+
+
+def unidade_bot(nome):
+    return f"nyxz-bot-{nome}"
+
+
+def bot_rodando(nome):
+    return rodar(["systemctl", "--user", "is-active", "--quiet", unidade_bot(nome)])[0] == 0
+
+
+def discord_iniciar(nome):
+    # Serviço transitório do usuário: o bot continua rodando com o Dev Hub fechado.
+    rodar(["systemctl", "--user", "reset-failed", unidade_bot(nome)])
+    codigo, saida = rodar(["systemd-run", "--user", "--collect", f"--unit={unidade_bot(nome)}",
+                           f"--description=Bot do Discord {nome} (Dev Hub)",
+                           "/usr/libexec/nyxz/nyxz-dev", "discord", "rodar", nome])
+    if codigo != 0:
+        print(saida.strip(), file=sys.stderr)
+    return codigo
+
+
+def discord_parar(nome):
+    return rodar(["systemctl", "--user", "stop", unidade_bot(nome)])[0]
+
+
+def discord_logs(nome):
+    _, saida = rodar(["journalctl", "--user", "-u", unidade_bot(nome), "-n", "200", "-o", "cat", "--no-pager"])
+    for linha in saida.splitlines():
+        tipo, _, resto = linha.partition("|")
+        if tipo == "LOG":
+            print(resto)
+        elif tipo == "PASSO":
+            print("— " + resto)
+        elif tipo == "FIM":
+            print("— " + resto.replace("erro|", "Erro: "))
+        else:
+            print(linha)
+
+
+def discord_webhook(nome_cofre):
+    import urllib.request
+    url = cofre_ler(nome_cofre).strip()
+    if not url.startswith("https://discord.com/api/webhooks/") and not url.startswith("https://discordapp.com/api/webhooks/"):
+        print(f"Guarde a URL do webhook no cofre com o nome {nome_cofre}.", file=sys.stderr)
+        return 1
+    corpo = sys.stdin.read().encode("utf-8")
+    req = urllib.request.Request(url, data=corpo, method="POST",
+                                 headers={"Content-Type": "application/json", "User-Agent": "Nyxz-DevHub"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            print(f"Enviado (HTTP {r.status}).")
+            return 0
+    except Exception as e:   # erro do Discord vem com explicação no corpo
+        detalhe = getattr(e, "read", lambda: b"")().decode("utf-8", "replace")[:300]
+        print(f"O Discord recusou: {e} {detalhe}", file=sys.stderr)
+        return 1
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:2] == ["bancos", "tipos"]:
@@ -494,6 +798,24 @@ if __name__ == "__main__":
         print(cofre_ler(a[2]), end="")
     elif a[:2] == ["cofre", "remover"] and len(a) == 3:
         cofre_remover(a[2])
+    elif a[:2] == ["discord", "bots"]:
+        discord_bots()
+    elif a[:2] == ["discord", "criar"] and len(a) == 4:
+        sys.exit(discord_criar(a[2], a[3]))
+    elif a[:2] == ["discord", "token"] and len(a) == 3:
+        sys.exit(0 if cofre_guardar(f"discord-{a[2]}", sys.stdin.read().strip()) else 1)
+    elif a[:2] == ["discord", "servidor-teste"] and len(a) == 4:
+        sys.exit(discord_servidor_teste(a[2], a[3]))
+    elif a[:2] == ["discord", "rodar"] and len(a) == 3:
+        discord_rodar(a[2])
+    elif a[:2] == ["discord", "iniciar"] and len(a) == 3:
+        sys.exit(discord_iniciar(a[2]))
+    elif a[:2] == ["discord", "parar"] and len(a) == 3:
+        sys.exit(discord_parar(a[2]))
+    elif a[:2] == ["discord", "logs"] and len(a) == 3:
+        discord_logs(a[2])
+    elif a[:2] == ["discord", "webhook"] and len(a) == 3:
+        sys.exit(discord_webhook(a[2]))
     elif a[:2] == ["ssh", "hosts"]:
         ssh_hosts()
     elif a[:2] == ["ssh", "adicionar"] and len(a) in (6, 7):

@@ -2,8 +2,8 @@
 Type=Application
 Name=Dev Hub
 GenericName=Ferramentas de desenvolvimento
-Comment=Bancos locais, portas em uso, SSH e cofre de segredos
+Comment=Bancos locais, portas em uso, SSH, cofre de segredos, bots do Discord e editor de embeds
 Exec=/usr/libexec/nyxz/dev-hub
 Icon=utilities-terminal
 Categories=Development;
-Keywords=dev;ssh;chave;tunel;cofre;segredo;token;api;banco;database;postgres;postgresql;mysql;mariadb;redis;mongo;mongodb;xampp;porta;portas;localhost;servidor;
+Keywords=dev;discord;bot;embed;webhook;ssh;chave;tunel;cofre;segredo;token;api;banco;database;postgres;postgresql;mysql;mariadb;redis;mongo;mongodb;xampp;porta;portas;localhost;servidor;

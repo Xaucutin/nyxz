@@ -34,6 +34,7 @@ ColumnLayout {
             color: Tema.texto
             clip: true
             selectByMouse: true
+            activeFocusOnTab: true   // Tab passa de campo em campo
             echoMode: campo.oculto ? TextInput.Password : TextInput.Normal
         }
     }

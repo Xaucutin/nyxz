@@ -59,7 +59,9 @@ Também feitos e conferidos na VM (imagem 2081d44): **espaços com nome** (a bar
 
 Também feitos e conferidos na VM (imagem bb2a50c): **SSH** no Dev Hub (servidor SSH do computador agora vem desligado; hosts do `~/.ssh/config` com conectar, arquivos via SFTP, túnel e remover; gerar e copiar chaves) e **Cofre** (segredos no chaveiro do sistema, destravado no login; a lista só mostra nomes; as senhas dos bancos novos vão para lá). RAM com o chaveiro: 677 MB.
 
-**Próximos da Fase 4:** Discord Studio (bots e editor de embeds), domínios `.test` com HTTPS, túnel público, sessões de projeto (com o cofre injetando as variáveis) e limpeza de disco para dev.
+Também feito: **Discord Studio** no Dev Hub. "Bots do Discord" cria projetos em discord.js ou discord.py (`~/Projetos/Discord/<nome>`, com /ping e /exemplo), guarda o token no cofre (nunca em arquivo do projeto), roda como serviço do usuário com logs ao vivo e reinicia ao salvar; "Embeds" é um editor com prévia no visual do Discord, JSON editável nos dois sentidos, cópia para discord.js/discord.py e envio de teste por webhook. Conferido na VM: bot criado, `npm install` automático, token do cofre chegando ao bot (TokenInvalid com token de mentira) e reinício ao salvar; editor de embeds com a prévia certa.
+
+**Próximos da Fase 4:** domínios `.test` com HTTPS, túnel público, sessões de projeto (com o cofre injetando as variáveis) e limpeza de disco para dev.
 
 ## Ferramentas de desenvolvimento
 

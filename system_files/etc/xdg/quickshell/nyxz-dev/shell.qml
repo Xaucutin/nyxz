@@ -14,7 +14,9 @@ ShellRoot {
         { id: "bancos", nome: "Bancos locais" },
         { id: "portas", nome: "Portas em uso" },
         { id: "ssh", nome: "SSH" },
-        { id: "cofre", nome: "Cofre" }
+        { id: "cofre", nome: "Cofre" },
+        { id: "discord", nome: "Bots do Discord" },
+        { id: "embeds", nome: "Embeds" }
     ]
     property int atual: 0
 
@@ -141,7 +143,7 @@ ShellRoot {
                         active: ativa
                         opacity: ativa ? 1 : 0
                         source: {
-                            const mapa = { bancos: "PaginaBancos.qml", portas: "PaginaPortas.qml", ssh: "PaginaSsh.qml", cofre: "PaginaCofre.qml" };
+                            const mapa = { bancos: "PaginaBancos.qml", portas: "PaginaPortas.qml", ssh: "PaginaSsh.qml", cofre: "PaginaCofre.qml", discord: "PaginaDiscord.qml", embeds: "PaginaEmbeds.qml" };
                             return mapa[modelData.id];
                         }
                         transform: Translate { y: ativa ? 0 : 10 }

@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 # Abre o Dev Hub da Nyxz, opcionalmente numa página:
-#   dev-hub [bancos|portas|ssh|cofre]
+#   dev-hub [bancos|portas|ssh|cofre|discord|embeds]
 # Se já estiver aberto, só troca de página.
 pagina="${1:-}"
 if qs -c nyxz-dev ipc show >/dev/null 2>&1; then
