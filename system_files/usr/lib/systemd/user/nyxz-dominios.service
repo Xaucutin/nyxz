@@ -1,0 +1,7 @@
+[Unit]
+Description=Nyxz: domínios .test do Dev Hub (Caddy com HTTPS local)
+
+[Service]
+ExecStart=/usr/bin/caddy run --config %h/.config/nyxz/dev/Caddyfile --adapter caddyfile
+Restart=on-failure
+MemoryMax=96M

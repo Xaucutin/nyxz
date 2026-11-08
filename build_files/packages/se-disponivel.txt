@@ -52,3 +52,7 @@ gammastep
 gnome-keyring
 gnome-keyring-pam
 libsecret
+# Domínios .test com HTTPS no Dev Hub (Caddy na conta do usuário + autoridade local)
+caddy
+mkcert
+nss-tools

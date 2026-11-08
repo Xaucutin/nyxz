@@ -1,0 +1,89 @@
+#!/usr/bin/python3 -I
+"""Parte do Dev Hub que precisa de administrador (chamada com pkexec).
+
+  nyxz-dev-root dominios <nome> [<nome> ...] [--ca <rootCA.pem>]
+      reescreve o bloco da Nyxz em /etc/hosts (cada nome vira <nome>.test → 127.0.0.1)
+      e, com --ca, passa a confiar na autoridade local do mkcert do usuário
+  nyxz-dev-root dominios --nenhum
+      remove o bloco
+
+Tudo é validado aqui: nomes só [a-z0-9-], e o certificado tem de estar na pasta
+do mkcert de quem chamou e ser um certificado PEM.
+"""
+import os
+import pwd
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+HOSTS = Path("/etc/hosts")
+INICIO = "# nyxz-dev: início (gerado pelo Dev Hub; não edite)"
+FIM = "# nyxz-dev: fim"
+ANCORA = Path("/etc/pki/ca-trust/source/anchors/nyxz-dev-mkcert.pem")
+
+
+def erro(msg):
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def usuario_home():
+    uid = os.environ.get("PKEXEC_UID")
+    if not uid or not uid.isdigit():
+        erro("Use pelo Dev Hub (pkexec).")
+    return Path(pwd.getpwuid(int(uid)).pw_dir)
+
+
+def reescrever_hosts(nomes):
+    linhas = HOSTS.read_text(encoding="utf-8").splitlines()
+    fora, dentro = [], False
+    for l in linhas:
+        if l == INICIO:
+            dentro = True
+        elif l == FIM:
+            dentro = False
+        elif not dentro:
+            fora.append(l)
+    while fora and fora[-1].strip() == "":
+        fora.pop()
+    if nomes:
+        fora += ["", INICIO] + [f"127.0.0.1 {n}.test" for n in nomes] + [f"::1 {n}.test" for n in nomes] + [FIM]
+    novo = Path(str(HOSTS) + ".nyxz")
+    novo.write_text("\n".join(fora) + "\n", encoding="utf-8")
+    os.chmod(novo, 0o644)
+    os.replace(novo, HOSTS)
+
+
+def confiar(ca, home):
+    ca = Path(ca).resolve()
+    if ca != (home / ".local/share/mkcert/rootCA.pem").resolve() or not ca.is_file():
+        erro("Certificado fora da pasta do mkcert do usuário.")
+    texto = ca.read_text(encoding="utf-8", errors="replace")
+    if not texto.startswith("-----BEGIN CERTIFICATE-----") or texto.count("BEGIN CERTIFICATE") != 1:
+        erro("O arquivo não é um certificado PEM único.")
+    ANCORA.write_text(texto, encoding="utf-8")
+    os.chmod(ANCORA, 0o644)
+    subprocess.run(["update-ca-trust"], check=False)
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if not a or a[0] != "dominios":
+        print(__doc__)
+        sys.exit(2)
+    home = usuario_home()
+    a = a[1:]
+    ca = None
+    if "--ca" in a:
+        i = a.index("--ca")
+        ca = a[i + 1] if i + 1 < len(a) else erro("Falta o caminho do certificado.")
+        a = a[:i] + a[i + 2:]
+    nomes = [] if a == ["--nenhum"] else a
+    for n in nomes:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", n):
+            erro(f"Nome inválido: {n}")
+    reescrever_hosts(sorted(set(nomes)))
+    if ca:
+        confiar(ca, home)
+    print("ok")

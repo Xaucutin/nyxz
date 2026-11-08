@@ -6,4 +6,4 @@ Comment=Bancos locais, portas em uso, SSH, cofre de segredos, bots do Discord e 
 Exec=/usr/libexec/nyxz/dev-hub
 Icon=utilities-terminal
 Categories=Development;
-Keywords=dev;discord;bot;embed;webhook;ssh;chave;tunel;cofre;segredo;token;api;banco;database;postgres;postgresql;mysql;mariadb;redis;mongo;mongodb;xampp;porta;portas;localhost;servidor;
+Keywords=dev;dominio;test;https;certificado;tunel;webhook;ngrok;cloudflare;discord;bot;embed;webhook;ssh;chave;tunel;cofre;segredo;token;api;banco;database;postgres;postgresql;mysql;mariadb;redis;mongo;mongodb;xampp;porta;portas;localhost;servidor;

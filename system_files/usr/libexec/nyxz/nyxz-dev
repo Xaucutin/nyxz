@@ -40,6 +40,17 @@ Discord Studio (bots em ~/Projetos/Discord/<nome>; token no cofre como discord-<
   nyxz-dev discord logs <nome>                            últimas linhas do bot
   nyxz-dev discord webhook <nome-no-cofre>                envia o JSON da entrada padrão
 
+Domínios .test com HTTPS (Caddy na conta do usuário + certificados do mkcert):
+  nyxz-dev dominios listar                                JSON: domínios, se o Caddy está ligado
+  nyxz-dev dominios adicionar <nome> <porta>              <nome>.test → localhost:<porta> (pede senha)
+  nyxz-dev dominios remover <nome>
+  nyxz-dev dominios ligar|desligar
+
+Túnel público (Cloudflare, sem conta; link temporário *.trycloudflare.com):
+  nyxz-dev tunel listar                                   JSON: túneis abertos e o link de cada um
+  nyxz-dev tunel abrir <porta>
+  nyxz-dev tunel fechar <porta>
+
 Progresso (criar): linhas "PASSO|texto" e "LOG|texto"; última: "FIM|ok" ou "FIM|erro|mensagem".
 """
 import json
@@ -776,6 +787,191 @@ def discord_webhook(nome_cofre):
         return 1
 
 
+# ------------------------------------------------------------------ domínios .test
+
+DOMINIOS = PASTA / "dominios.json"
+CERTS = PASTA / "certs"
+CADDYFILE = PASTA / "Caddyfile"
+CAROOT = Path.home() / ".local/share/mkcert"
+
+
+def ler_dominios():
+    try:
+        return json.loads(DOMINIOS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def gravar_dominios(lista):
+    PASTA.mkdir(parents=True, exist_ok=True)
+    DOMINIOS.write_text(json.dumps(lista, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def caddy_ligado():
+    return rodar(["systemctl", "--user", "is-active", "--quiet", "nyxz-dominios.service"])[0] == 0
+
+
+def escrever_caddyfile(lista):
+    partes = ["{\n\tadmin off\n\tpersist_config off\n\t# Os certificados vêm do mkcert (autoridade local); o Caddy só redireciona http → https\n\tauto_https disable_certs\n}\n"]
+    for d in lista:
+        n = d["nome"]
+        partes.append(f"{n}.test {{\n\ttls {CERTS}/{n}.test.pem {CERTS}/{n}.test-key.pem\n\treverse_proxy localhost:{d['porta']}\n}}\n")
+    CADDYFILE.write_text("\n".join(partes), encoding="utf-8")
+
+
+def confiar_nss(ca):
+    """Coloca a autoridade local nos bancos de certificados do Chromium/Brave (inclusive Flatpak)."""
+    if not shutil.which("certutil"):
+        return
+    bancos = [Path.home() / ".pki/nssdb", Path.home() / ".var/app/com.brave.Browser/.pki/nssdb",
+              Path.home() / ".var/app/com.google.Chrome/.pki/nssdb"]
+    for banco in bancos:
+        if not banco.parent.parent.exists() and "var/app" in str(banco):
+            continue   # app Flatpak não instalado
+        banco.mkdir(parents=True, exist_ok=True)
+        if not (banco / "cert9.db").exists():
+            rodar(["certutil", "-N", "--empty-password", "-d", f"sql:{banco}"])
+        rodar(["certutil", "-A", "-d", f"sql:{banco}", "-t", "C,,", "-n", "Nyxz Dev (mkcert)", "-i", str(ca)])
+
+
+def aplicar_dominios(lista, com_ca=False):
+    """Atualiza /etc/hosts (com senha), o Caddyfile e reinicia o Caddy."""
+    cmd = ["pkexec", "/usr/libexec/nyxz/nyxz-dev-root", "dominios"] + ([d["nome"] for d in lista] or ["--nenhum"])
+    if com_ca:
+        cmd += ["--ca", str(CAROOT / "rootCA.pem")]
+    codigo, saida = rodar(cmd)
+    if codigo != 0:
+        print("Não foi possível atualizar os domínios (senha cancelada?). " + saida.strip()[-200:], file=sys.stderr)
+        return codigo
+    escrever_caddyfile(lista)
+    if lista:
+        rodar(["systemctl", "--user", "restart", "nyxz-dominios.service"])
+    else:
+        rodar(["systemctl", "--user", "stop", "nyxz-dominios.service"])
+    return 0
+
+
+def dominios_listar():
+    lista = [{**d, "url": f"https://{d['nome']}.test"} for d in ler_dominios()]
+    print(json.dumps({"ligado": caddy_ligado(), "dominios": lista,
+                      "pronto": bool(shutil.which("caddy") and shutil.which("mkcert"))}, ensure_ascii=False))
+
+
+def dominios_adicionar(nome, porta):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", nome) or not str(porta).isdigit():
+        print("Nome inválido (minúsculas, números e -) ou porta inválida.", file=sys.stderr)
+        return 1
+    if not shutil.which("caddy") or not shutil.which("mkcert"):
+        print("Caddy ou mkcert não estão instalados nesta versão. Atualize a Nyxz.", file=sys.stderr)
+        return 1
+    lista = [d for d in ler_dominios() if d["nome"] != nome]
+    lista.append({"nome": nome, "porta": int(porta)})
+    env = dict(os.environ, CAROOT=str(CAROOT))
+    primeira = not (CAROOT / "rootCA.pem").exists()
+    if primeira:
+        # Cria a autoridade local; TRUST_STORES=nss evita o sudo do mkcert (o sistema
+        # passa a confiar nela pelo nyxz-dev-root, com a senha do pkexec).
+        subprocess.run(["mkcert", "-install"], env=dict(env, TRUST_STORES="nss"), capture_output=True)
+        if not (CAROOT / "rootCA.pem").exists():
+            print("O mkcert não conseguiu criar a autoridade local.", file=sys.stderr)
+            return 1
+        confiar_nss(CAROOT / "rootCA.pem")
+    CERTS.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(["mkcert", "-cert-file", str(CERTS / f"{nome}.test.pem"),
+                        "-key-file", str(CERTS / f"{nome}.test-key.pem"), f"{nome}.test"],
+                       env=env, capture_output=True, text=True)
+    if r.returncode != 0:
+        print("O certificado não foi criado: " + r.stderr.strip()[-200:], file=sys.stderr)
+        return 1
+    codigo = aplicar_dominios(lista, com_ca=primeira)
+    if codigo == 0:
+        gravar_dominios(lista)
+    return codigo
+
+
+def dominios_remover(nome):
+    lista = [d for d in ler_dominios() if d["nome"] != nome]
+    codigo = aplicar_dominios(lista)
+    if codigo == 0:
+        gravar_dominios(lista)
+        for f in CERTS.glob(f"{nome}.test*.pem"):
+            f.unlink()
+    return codigo
+
+
+def dominios_ligar(ligar):
+    if ligar and ler_dominios():
+        escrever_caddyfile(ler_dominios())
+        return rodar(["systemctl", "--user", "restart", "nyxz-dominios.service"])[0]
+    return rodar(["systemctl", "--user", "stop", "nyxz-dominios.service"])[0]
+
+
+# ------------------------------------------------------------------ túnel público
+
+CLOUDFLARED = Path.home() / ".local/bin/cloudflared"
+
+
+def garantir_cloudflared():
+    if CLOUDFLARED.exists():
+        return True
+    import urllib.request
+    CLOUDFLARED.parent.mkdir(parents=True, exist_ok=True)
+    url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+    tmp = CLOUDFLARED.with_suffix(".baixando")
+    try:
+        with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+        os.chmod(tmp, 0o755)
+        os.replace(tmp, CLOUDFLARED)
+        return True
+    except Exception as e:
+        print(f"Não foi possível baixar o cloudflared: {e}", file=sys.stderr)
+        return False
+
+
+def link_do_tunel(porta):
+    _, saida = rodar(["journalctl", "--user", "-u", f"nyxz-tunel-{porta}", "-o", "cat", "--no-pager", "-n", "200"])
+    achados = re.findall(r"https://[a-z0-9-]+\.trycloudflare\.com", saida)
+    return achados[-1] if achados else ""
+
+
+def tunel_listar():
+    _, saida = rodar(["systemctl", "--user", "list-units", "nyxz-tunel-*", "--plain", "--no-legend", "--state=active"])
+    tuneis = []
+    for linha in saida.splitlines():
+        m = re.match(r"nyxz-tunel-(\d+)\.service", linha.strip())
+        if m:
+            tuneis.append({"porta": int(m.group(1)), "link": link_do_tunel(m.group(1))})
+    print(json.dumps(tuneis, ensure_ascii=False))
+
+
+def tunel_abrir(porta):
+    if not str(porta).isdigit():
+        return 2
+    if not garantir_cloudflared():
+        return 1
+    unidade = f"nyxz-tunel-{porta}"
+    rodar(["systemctl", "--user", "reset-failed", unidade])
+    codigo, saida = rodar(["systemd-run", "--user", "--collect", f"--unit={unidade}",
+                           f"--description=Túnel público para localhost:{porta} (Dev Hub)",
+                           str(CLOUDFLARED), "tunnel", "--no-autoupdate", "--url", f"http://localhost:{porta}"])
+    if codigo != 0:
+        print(saida.strip(), file=sys.stderr)
+        return codigo
+    for _ in range(30):   # o link aparece em poucos segundos
+        time.sleep(1)
+        link = link_do_tunel(porta)
+        if link:
+            print(link)
+            return 0
+    print("O túnel subiu, mas o link ainda não apareceu. Veja de novo em instantes.", file=sys.stderr)
+    return 0
+
+
+def tunel_fechar(porta):
+    return rodar(["systemctl", "--user", "stop", f"nyxz-tunel-{int(porta)}"])[0]
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:2] == ["bancos", "tipos"]:
@@ -798,6 +994,20 @@ if __name__ == "__main__":
         print(cofre_ler(a[2]), end="")
     elif a[:2] == ["cofre", "remover"] and len(a) == 3:
         cofre_remover(a[2])
+    elif a[:2] == ["dominios", "listar"]:
+        dominios_listar()
+    elif a[:2] == ["dominios", "adicionar"] and len(a) == 4:
+        sys.exit(dominios_adicionar(a[2], a[3]))
+    elif a[:2] == ["dominios", "remover"] and len(a) == 3:
+        sys.exit(dominios_remover(a[2]))
+    elif a[:2] in (["dominios", "ligar"], ["dominios", "desligar"]):
+        sys.exit(dominios_ligar(a[1] == "ligar"))
+    elif a[:2] == ["tunel", "listar"]:
+        tunel_listar()
+    elif a[:2] == ["tunel", "abrir"] and len(a) == 3:
+        sys.exit(tunel_abrir(a[2]))
+    elif a[:2] == ["tunel", "fechar"] and len(a) == 3:
+        sys.exit(tunel_fechar(a[2]))
     elif a[:2] == ["discord", "bots"]:
         discord_bots()
     elif a[:2] == ["discord", "criar"] and len(a) == 4:
