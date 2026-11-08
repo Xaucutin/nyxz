@@ -1,0 +1,28 @@
+#!/usr/bin/bash
+# Filtro de luz azul (hyprsunset). Só existe processo enquanto o filtro está ligado.
+#   luz-azul ligar <temperatura>   ex.: 4500 (mais baixo = mais quente)
+#   luz-azul desligar
+#   luz-azul estado                sai com 0 se estiver ligado
+set -u
+case "${1:-}" in
+  ligar)
+    t="${2:-4500}"
+    if pgrep -x hyprsunset >/dev/null; then
+      # Já ligado: só troca a temperatura pela IPC do hyprsunset.
+      hyprctl hyprsunset temperature "$t" >/dev/null 2>&1 && exit 0
+      pkill -x hyprsunset; sleep 0.3
+    fi
+    setsid -f nyx run hyprsunset -t "$t" >/dev/null 2>&1
+    ;;
+  desligar)
+    pkill -x hyprsunset
+    exit 0
+    ;;
+  estado)
+    pgrep -x hyprsunset >/dev/null
+    ;;
+  *)
+    echo "Uso: luz-azul ligar <temperatura>|desligar|estado" >&2
+    exit 2
+    ;;
+esac

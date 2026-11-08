@@ -1,0 +1,84 @@
+#!/usr/bin/python3 -I
+"""Brilho das telas (estilo Twinkle Tray). Só roda quando o brilho muda: 0 MB parado.
+
+  brilho listar              -> JSON: [{"id", "nome", "valor"}]
+  brilho definir <id> <0-100>
+  brilho ajustar <+/-n>      (todas as telas; usado pela roda do mouse na barra)
+
+Monitores externos: DDC/CI pelo próprio cabo (ddcutil; o monitor precisa ter
+DDC/CI ligado no menu dele). Tela de notebook: brightnessctl (via logind, sem senha).
+"""
+import json
+import re
+import shutil
+import subprocess
+import sys
+
+
+def rodar(cmd, tempo=8):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=tempo)
+        return r.returncode, r.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+
+
+def monitores_ddc():
+    if not shutil.which("ddcutil"):
+        return []
+    codigo, saida = rodar(["ddcutil", "detect", "--brief"], tempo=15)
+    if codigo != 0:
+        return []
+    telas = []
+    for bloco in re.split(r"\n(?=Display \d+)", saida):
+        bus = re.search(r"I2C bus:\s*/dev/i2c-(\d+)", bloco)
+        if not bloco.startswith("Display") or not bus:
+            continue  # "Invalid display" (sem DDC/CI) fica de fora
+        modelo = re.search(r"Monitor:\s*[^:]*:([^:\n]+)", bloco)
+        nome = modelo.group(1).strip() if modelo else f"Monitor {bus.group(1)}"
+        c, v = rodar(["ddcutil", "--bus", bus.group(1), "getvcp", "10", "--brief"])
+        m = re.search(r"VCP 10 \S+ (\d+) (\d+)", v) if c == 0 else None
+        valor = round(int(m.group(1)) * 100 / max(1, int(m.group(2)))) if m else 50
+        telas.append({"id": f"ddc:{bus.group(1)}", "nome": nome, "valor": valor})
+    return telas
+
+
+def telas_notebook():
+    if not shutil.which("brightnessctl"):
+        return []
+    codigo, saida = rodar(["brightnessctl", "-m", "-c", "backlight", "info"])
+    telas = []
+    for linha in saida.splitlines() if codigo == 0 else []:
+        partes = linha.split(",")  # dispositivo,classe,atual,pct%,máximo
+        if len(partes) >= 4:
+            telas.append({"id": f"tela:{partes[0]}", "nome": "Tela do notebook",
+                          "valor": int(partes[3].rstrip("%") or 0)})
+    return telas
+
+
+def definir(ident, valor):
+    valor = max(0, min(100, int(valor)))
+    tipo, _, alvo = ident.partition(":")
+    if tipo == "ddc":
+        codigo, _ = rodar(["ddcutil", "--bus", alvo, "--noverify", "setvcp", "10", str(valor)])
+    elif tipo == "tela":
+        # Nunca 0% na tela do notebook: ela apagaria de vez.
+        codigo, _ = rodar(["brightnessctl", "-q", "-d", alvo, "set", f"{max(1, valor)}%"])
+    else:
+        codigo = 2
+    sys.exit(codigo)
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if args[:1] == ["listar"]:
+        print(json.dumps(telas_notebook() + monitores_ddc(), ensure_ascii=False))
+    elif len(args) == 2 and args[0] == "ajustar":
+        for t in telas_notebook() + monitores_ddc():
+            novo = max(0, min(100, t["valor"] + int(args[1])))
+            subprocess.run([sys.argv[0], "definir", t["id"], str(novo)])
+    elif len(args) == 3 and args[0] == "definir":
+        definir(args[1], args[2])
+    else:
+        print(__doc__)
+        sys.exit(2)

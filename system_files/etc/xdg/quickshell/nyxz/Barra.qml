@@ -239,6 +239,47 @@ PanelWindow {
                 }
             }
 
+            // ---------------------------------------------- brilho e luz azul
+            Item {
+                id: botaoRapido
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                property int acumulado: 0
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 7
+                    color: Estado.rapidoAberto || areaRapido.containsMouse ? Tema.hover : "transparent"
+                }
+                Image {
+                    anchors.centerIn: parent
+                    source: LuzAzul.ativo ? "icones/lua.svg" : "icones/brilho.svg"
+                    sourceSize: Qt.size(16, 16)
+                }
+                // Rolar ajusta o brilho de todas as telas; junta os giros para o DDC/CI (lento).
+                Timer {
+                    id: brilhoRoda
+                    interval: 350
+                    onTriggered: {
+                        Quickshell.execDetached(["/usr/libexec/nyxz/brilho", "ajustar", String(botaoRapido.acumulado)]);
+                        botaoRapido.acumulado = 0;
+                    }
+                }
+                MouseArea {
+                    id: areaRapido
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        const abrir = !Estado.rapidoAberto;
+                        Estado.fecharTudo();
+                        Estado.rapidoAberto = abrir;
+                    }
+                    onWheel: wheel => {
+                        botaoRapido.acumulado += wheel.angleDelta.y > 0 ? 5 : -5;
+                        brilhoRoda.restart();
+                    }
+                }
+            }
+
             // ---------------------------------------------- som
             Item {
                 Layout.preferredWidth: 30

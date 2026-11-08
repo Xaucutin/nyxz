@@ -42,3 +42,6 @@ pciutils
 libnotify
 # Ferramentas do PipeWire (pw-record, pw-top): diagnóstico e testes de som
 pipewire-utils
+# Brilho: monitores externos pelo cabo (DDC/CI) e tela de notebook
+ddcutil
+brightnessctl

@@ -9,6 +9,7 @@ Singleton {
 
     property bool buscaAberta: false
     property bool somAberto: false
+    property bool rapidoAberto: false
 
     // Menu do botão direito de um app na barra
     property var menuToplevel: null
@@ -18,6 +19,7 @@ Singleton {
     function fecharTudo() {
         buscaAberta = false;
         somAberto = false;
+        rapidoAberto = false;
         menuAberto = false;
     }
 
