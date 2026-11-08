@@ -87,6 +87,31 @@ if ! command -v uwsm >/dev/null 2>&1; then
   dnf -y remove $build_deps || true
 fi
 
+# ---------------------------------------------------------------- vídeo como papel de parede
+# O mpvpaper não tem pacote para o Fedora 44 nos repositórios usados: código-fonte,
+# versão fixa. Só o binário e a mpv-libs ficam no sistema.
+log "mpvpaper (código-fonte)"
+MPVPAPER_VERSION="1.9"
+if ! command -v mpvpaper >/dev/null 2>&1; then
+  dnf -y install --setopt=install_weak_deps=False mpv-libs
+  build_deps="meson ninja-build gcc git-core pkgconf-pkg-config mpv-devel wayland-devel wayland-protocols-devel mesa-libEGL-devel"
+  # shellcheck disable=SC2086
+  dnf -y install --setopt=install_weak_deps=False $build_deps
+  tmp="$(mktemp -d)"
+  if git clone --depth 1 --branch "${MPVPAPER_VERSION}" https://github.com/GhostNaN/mpvpaper.git "$tmp/mpvpaper" \
+     && meson setup "$tmp/mpvpaper/build" "$tmp/mpvpaper" --prefix=/usr --buildtype=release \
+     && ninja -C "$tmp/mpvpaper/build" \
+     && install -Dm0755 "$tmp/mpvpaper/build/mpvpaper" /usr/bin/mpvpaper \
+     && { [ ! -f "$tmp/mpvpaper/build/mpvpaper-holder" ] || install -Dm0755 "$tmp/mpvpaper/build/mpvpaper-holder" /usr/bin/mpvpaper-holder; }; then
+    echo "mpvpaper ${MPVPAPER_VERSION}: ok"
+  else
+    echo "AVISO: mpvpaper não foi instalado (papel de parede em vídeo indisponível)"
+  fi
+  rm -rf "$tmp"
+  # shellcheck disable=SC2086
+  dnf -y remove $build_deps || true
+fi
+
 # ---------------------------------------------------------------- fontes
 log "Fontes Geist e Geist Mono"
 GEIST_VERSION="v1.9.2"

@@ -1,25 +1,38 @@
 #!/usr/bin/bash
-# Filtro de luz azul (hyprsunset). Só existe processo enquanto o filtro está ligado.
+# Filtro de luz azul. Só existe processo enquanto o filtro está ligado.
 #   luz-azul ligar <temperatura>   ex.: 4500 (mais baixo = mais quente)
 #   luz-azul desligar
 #   luz-azul estado                sai com 0 se estiver ligado
+# Usa o hyprsunset quando instalado; senão, o gammastep (os dois usam o controle de
+# gama do Wayland, que o Hyprland suporta).
 set -u
+
+parar() { pkill -x hyprsunset 2>/dev/null; pkill -x gammastep 2>/dev/null; true; }
+
 case "${1:-}" in
   ligar)
     t="${2:-4500}"
-    if pgrep -x hyprsunset >/dev/null; then
-      # Já ligado: só troca a temperatura pela IPC do hyprsunset.
-      hyprctl hyprsunset temperature "$t" >/dev/null 2>&1 && exit 0
-      pkill -x hyprsunset; sleep 0.3
+    if command -v hyprsunset >/dev/null; then
+      if pgrep -x hyprsunset >/dev/null; then
+        # Já ligado: só troca a temperatura pela IPC do hyprsunset.
+        hyprctl hyprsunset temperature "$t" >/dev/null 2>&1 && exit 0
+      fi
+      parar; sleep 0.3
+      setsid -f nyx run hyprsunset -t "$t" >/dev/null 2>&1
+    elif command -v gammastep >/dev/null; then
+      # Modo manual (-O): fica rodando para segurar a cor; -P zera ajustes anteriores.
+      parar; sleep 0.3
+      setsid -f nyx run gammastep -P -O "$t" >/dev/null 2>&1
+    else
+      echo "Nenhum filtro de luz azul instalado (hyprsunset ou gammastep)." >&2
+      exit 1
     fi
-    setsid -f nyx run hyprsunset -t "$t" >/dev/null 2>&1
     ;;
   desligar)
-    pkill -x hyprsunset
-    exit 0
+    parar
     ;;
   estado)
-    pgrep -x hyprsunset >/dev/null
+    pgrep -x hyprsunset >/dev/null || pgrep -x gammastep >/dev/null
     ;;
   *)
     echo "Uso: luz-azul ligar <temperatura>|desligar|estado" >&2
