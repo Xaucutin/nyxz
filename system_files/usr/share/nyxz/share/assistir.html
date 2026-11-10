@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nyxz Share</title>
+<style>
+  :root {
+    --fundo: #09090D; --painel: #0F0F13; --elevado: #131318; --sel: #1C1C22; --borda: #1E1E25; --borda2: #26262D;
+    --texto: #F4F2F8; --texto2: #A09EAA; --texto3: #64626E; --texto4: #4C4A55; --ok: #7FB894; --erro: #D0676A;
+    --curva: cubic-bezier(.16, 1, .3, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto); }
+  body { font: 13px/1.45 Geist, "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  .entrada { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; }
+  .cartao { width: min(380px, 100%); background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; padding: 26px;
+            display: flex; flex-direction: column; gap: 12px; animation: sobe .5s var(--curva); }
+  @keyframes sobe { from { opacity: 0; transform: translateY(10px); } }
+  .marca { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .cartao p { margin: 0; color: var(--texto2); }
+  input { font: inherit; color: var(--texto); background: var(--elevado); border: 1px solid var(--borda); border-radius: 8px; padding: 10px 12px; outline: none; width: 100%; }
+  input:focus { border-color: var(--texto4); }
+  button { font: inherit; cursor: pointer; border-radius: 8px; padding: 10px 14px; border: 1px solid var(--borda2); background: #16161B; color: #E4E2EA; }
+  button.principal { background: var(--texto); color: var(--fundo); border-color: var(--texto); font-weight: 500; }
+  button:disabled { opacity: .5; cursor: default; }
+  .erro { color: var(--erro); font-size: 12px; min-height: 1em; }
+  .palco { position: fixed; inset: 0; background: #000; display: none; }
+  .palco.ativo { display: block; }
+  video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .barra { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+           background: linear-gradient(transparent, rgba(9, 9, 13, .85)); opacity: 0; transition: opacity .3s; }
+  .palco:hover .barra, .palco.parado .barra { opacity: 1; }
+  .barra .titulo { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .barra button { padding: 6px 12px; background: rgba(22, 22, 27, .8); }
+  .barra input[type=range] { width: 110px; padding: 0; accent-color: #CFCDD6; background: none; border: 0; }
+  .info { position: absolute; top: 12px; right: 12px; padding: 5px 10px; border-radius: 999px; font-size: 11.5px;
+          background: rgba(15, 15, 19, .75); border: 1px solid var(--borda); color: var(--texto2); font-variant-numeric: tabular-nums;
+          backdrop-filter: blur(8px); }
+  .aviso { position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--texto2); padding: 24px; }
+  .palco.parado .aviso { display: grid; }
+  .som { position: absolute; top: 12px; left: 12px; }
+  .som button { padding: 6px 12px; background: rgba(244, 242, 248, .92); color: var(--fundo); border: 0; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="entrada" id="entrada">
+  <form class="cartao" id="form">
+    <div class="marca">
+      <svg width="22" height="11" viewBox="0 0 44 22" fill="none"><path d="M2 20L12 2l8 14 8-14 14 18" stroke="#F4F2F8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      <span id="titulo">Nyxz Share</span>
+    </div>
+    <p id="descricao">Procurando a transmissão…</p>
+    <input id="nome" maxlength="32" placeholder="Seu nome" autocomplete="nickname" required>
+    <input id="senha" type="password" maxlength="64" placeholder="Senha da transmissão" hidden>
+    <button class="principal" id="entrar" type="submit" disabled>Assistir</button>
+    <div class="erro" id="erro"></div>
+  </form>
+</div>
+
+<div class="palco" id="palco">
+  <video id="video" autoplay playsinline muted></video>
+  <div class="som" id="som"><button id="ligarSom">Ativar o som</button></div>
+  <div class="info" id="info">conectando…</div>
+  <div class="aviso" id="aviso"></div>
+  <div class="barra">
+    <span class="titulo" id="tituloPalco"></span>
+    <input type="range" id="volume" min="0" max="100" value="100" title="Volume">
+    <button id="mudo">Ativar som</button>
+    <button id="tela">Tela cheia</button>
+    <button id="sair">Sair</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let id = null, pc = null, eventos = null;
+
+try { $("nome").value = localStorage.getItem("nyxz-share-nome") || ""; } catch (e) {}
+
+// ------------------------------------------------ a transmissão está no ar?
+async function conferir() {
+  try {
+    const d = await (await fetch("/api/estado", { cache: "no-store" })).json();
+    $("titulo").textContent = d.nome || "Nyxz Share";
+    $("senha").hidden = !d.protegida;
+    $("entrar").disabled = !d.transmitindo;
+    $("descricao").textContent = d.transmitindo
+      ? `Ao vivo${d.espectadores ? " · " + d.espectadores + (d.espectadores === 1 ? " pessoa assistindo" : " pessoas assistindo") : ""}.`
+      : "Ninguém está transmitindo agora. Esta página entra sozinha quando começar.";
+    return d.transmitindo;
+  } catch (e) {
+    $("descricao").textContent = "Não deu para falar com o PC de quem transmite.";
+    return false;
+  }
+}
+conferir();
+const vigia = setInterval(() => { if (!id) conferir(); }, 3000);
+
+// ------------------------------------------------ entrar
+$("form").onsubmit = async e => {
+  e.preventDefault();
+  $("erro").textContent = "";
+  try { localStorage.setItem("nyxz-share-nome", $("nome").value); } catch (e) {}
+  const r = await fetch("/api/entrar", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nome: $("nome").value.trim(), senha: $("senha").value }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { $("erro").textContent = d.erro || "Não deu para entrar."; return; }
+  id = d.id;
+  $("tituloPalco").textContent = d.nome || "Nyxz Share";
+  $("entrada").style.display = "none";
+  $("palco").classList.add("ativo");
+  conectar();
+};
+
+function sinal(dados) {
+  return fetch("/api/sinal", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ para: "transmissor", de: id, dados }) });
+}
+
+function novaConexao() {
+  if (pc) pc.close();
+  pc = new RTCPeerConnection({ iceServers: [] });   // mesma LAN virtual: sem STUN/TURN
+  pc.ontrack = e => { $("video").srcObject = e.streams[0]; };
+  pc.onicecandidate = e => { if (e.candidate) sinal({ candidato: e.candidate.toJSON() }); };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed") parado("A conexão falhou. Vocês estão na mesma rede de jogo?");
+    if (pc.connectionState === "connected") $("palco").classList.remove("parado");
+  };
+}
+function conectar() {
+  novaConexao();
+  eventos = new EventSource("/api/eventos/espectador?id=" + id);
+  eventos.onmessage = async m => {
+    const ev = JSON.parse(m.data);
+    if (ev.tipo === "sinal") {
+      const d = ev.dados;
+      if (d.sdp) {
+        // Oferta nova (ex.: o som foi ligado no meio, ou a tela foi trocada): conexão nova
+        if (pc.currentRemoteDescription) novaConexao();
+        await pc.setRemoteDescription(d.sdp);
+        const resp = await pc.createAnswer();
+        await pc.setLocalDescription(resp);
+        sinal({ sdp: pc.localDescription.toJSON() });
+      } else if (d.candidato) {
+        await pc.addIceCandidate(d.candidato).catch(() => {});
+      }
+    } else if (ev.tipo === "fim") {
+      parado("A transmissão acabou. Esta página volta sozinha se começar de novo.");
+      esperarVolta();
+    } else if (ev.tipo === "removido") {
+      parado("Quem transmite tirou você da sala.");
+      eventos.close();
+    }
+  };
+}
+// Depois de "fim", entra de novo sozinho quando a transmissão voltar
+function esperarVolta() {
+  if (eventos) eventos.close();
+  id = null;
+  const t = setInterval(async () => {
+    if (await conferir()) { clearInterval(t); $("form").requestSubmit(); }
+  }, 3000);
+}
+function parado(texto) {
+  $("aviso").textContent = texto;
+  $("palco").classList.add("parado");
+  $("info").textContent = "parado";
+}
+
+// ------------------------------------------------ som (o navegador só deixa tocar depois de um clique)
+$("ligarSom").onclick = () => { $("video").muted = false; $("som").style.display = "none"; $("mudo").textContent = "Silenciar"; };
+$("mudo").onclick = () => {
+  const v = $("video"); v.muted = !v.muted;
+  $("mudo").textContent = v.muted ? "Ativar som" : "Silenciar";
+  $("som").style.display = v.muted ? "" : "none";
+};
+$("volume").oninput = () => { $("video").volume = $("volume").value / 100; };
+$("tela").onclick = () => document.fullscreenElement ? document.exitFullscreen() : $("palco").requestFullscreen();
+$("video").ondblclick = () => $("tela").onclick();
+$("sair").onclick = () => { if (pc) pc.close(); if (eventos) eventos.close(); location.reload(); };
+
+// ------------------------------------------------ resolução, FPS e atraso no canto
+setInterval(async () => {
+  if (!pc || pc.connectionState !== "connected") return;
+  const st = await pc.getStats();
+  let w = 0, h = 0, fps = 0, rtt = null, buffer = null;
+  st.forEach(r => {
+    if (r.type === "inbound-rtp" && r.kind === "video") {
+      w = r.frameWidth || 0; h = r.frameHeight || 0; fps = Math.round(r.framesPerSecond || 0);
+      if (r.jitterBufferEmittedCount) buffer = r.jitterBufferDelay / r.jitterBufferEmittedCount;
+    }
+    if (r.type === "candidate-pair" && r.nominated && r.currentRoundTripTime != null) rtt = r.currentRoundTripTime;
+  });
+  // Atraso aproximado: metade da ida e volta + o que fica guardado no buffer de vídeo
+  const atraso = rtt != null ? Math.round((rtt / 2 + (buffer || 0)) * 1000) : null;
+  $("info").textContent = w ? `${w}×${h} · ${fps} FPS${atraso != null ? " · ~" + atraso + " ms" : ""}` : "conectando…";
+}, 1000);
+</script>
+</body>
+</html>

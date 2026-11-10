@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nyxz Share · Transmitir</title>
+<style>
+  :root {
+    --fundo: #09090D; --painel: #0F0F13; --elevado: #131318; --hover: #17171C; --sel: #1C1C22;
+    --borda: #1E1E25; --borda2: #26262D; --texto: #F4F2F8; --texto2: #A09EAA; --texto3: #64626E;
+    --texto4: #4C4A55; --ok: #7FB894; --aviso: #C9A86A; --erro: #D0676A; --trilho: #24242B;
+    --curva: cubic-bezier(.16, 1, .3, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fundo); color: var(--texto); }
+  body { font: 13px/1.45 Geist, "Inter", system-ui, sans-serif; min-height: 100vh; }
+  .topo { display: flex; align-items: center; gap: 12px; padding: 18px 24px; border-bottom: 1px solid var(--borda); }
+  .topo h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+  .pilula { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px;
+            background: var(--elevado); border: 1px solid var(--borda); color: var(--texto2); font-size: 12px; }
+  .pilula i { width: 7px; height: 7px; border-radius: 50%; background: var(--texto4); }
+  .pilula.vivo { color: var(--texto); }
+  .pilula.vivo i { background: var(--erro); box-shadow: 0 0 0 0 rgba(208,103,106,.6); animation: pulso 1.8s var(--curva) infinite; }
+  @keyframes pulso { 70% { box-shadow: 0 0 0 7px rgba(208,103,106,0); } 100% { box-shadow: 0 0 0 0 rgba(208,103,106,0); } }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 0; min-height: calc(100vh - 62px); }
+  .palco { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+  .previa { position: relative; aspect-ratio: 16 / 9; background: var(--painel); border: 1px solid var(--borda);
+            border-radius: 10px; overflow: hidden; display: grid; place-items: center; }
+  .previa video { width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
+  .previa.ativa video { display: block; }
+  .previa .vazio { color: var(--texto3); text-align: center; padding: 24px; }
+  .previa.ativa .vazio { display: none; }
+  .acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; padding: 8px 14px; border: 1px solid var(--borda2);
+           background: #16161B; color: #E4E2EA; transition: background .14s; }
+  button:hover { background: var(--sel); }
+  button.principal { background: var(--texto); color: var(--fundo); border-color: var(--texto); font-weight: 500; }
+  button.principal:hover { background: #E2E0E8; }
+  button.perigo { color: var(--erro); }
+  button:disabled { opacity: .45; cursor: default; }
+  aside { border-left: 1px solid var(--borda); padding: 20px 22px; display: flex; flex-direction: column; gap: 22px; overflow-y: auto; max-height: calc(100vh - 62px); }
+  h2 { font-size: 12px; font-weight: 500; color: var(--texto3); margin: 0 0 10px; }
+  label { display: block; color: var(--texto3); font-size: 11px; margin: 10px 0 4px; }
+  select, input[type=text], input[type=password] {
+    width: 100%; font: inherit; color: var(--texto); background: var(--elevado); border: 1px solid var(--borda);
+    border-radius: 8px; padding: 8px 10px; outline: none; }
+  select:focus, input:focus { border-color: var(--texto4); }
+  .linha { display: flex; gap: 8px; align-items: center; }
+  .linha > * { flex: 1; }
+  .chips { display: flex; gap: 6px; margin-top: 8px; }
+  .chip { padding: 4px 11px; border-radius: 999px; font-size: 12px; background: transparent; border: 1px solid var(--borda); color: var(--texto2); }
+  .chip.ativo { background: var(--sel); color: var(--texto); border-color: #23232A; }
+  input[type=range] { width: 100%; accent-color: #CFCDD6; }
+  .valor { color: var(--texto2); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .dica { color: var(--texto3); font-size: 11.5px; }
+  .link { display: flex; gap: 8px; align-items: center; background: var(--elevado); border: 1px solid var(--borda);
+          border-radius: 8px; padding: 6px 6px 6px 10px; font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; }
+  .link span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link button { padding: 5px 10px; font-family: Geist, system-ui, sans-serif; }
+  .pessoas { display: flex; flex-direction: column; gap: 6px; }
+  .pessoa { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--elevado); border: 1px solid var(--borda); }
+  .pessoa .nome { flex: 1; }
+  .pessoa .meta { color: var(--texto3); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .pessoa i { width: 6px; height: 6px; border-radius: 50%; background: var(--aviso); }
+  .pessoa i.ok { background: var(--ok); }
+  .pessoa button { padding: 4px 9px; font-size: 12px; }
+  .aviso { color: var(--aviso); font-size: 12px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { border-left: 0; border-top: 1px solid var(--borda); max-height: none; } }
+</style>
+</head>
+<body>
+<div class="topo">
+  <svg width="22" height="11" viewBox="0 0 44 22" fill="none"><path d="M2 20L12 2l8 14 8-14 14 18" stroke="#F4F2F8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg>
+  <h1>Nyxz Share</h1>
+  <span class="pilula" id="status"><i></i><span>Parado</span></span>
+</div>
+<main>
+  <section class="palco">
+    <div class="previa" id="previa">
+      <video id="video" autoplay muted playsinline></video>
+      <div class="vazio">Escolha a tela inteira, um monitor ou só uma janela.<br>Quem estiver na sua rede de jogo assiste pelo link ao lado.</div>
+    </div>
+    <div class="acoes">
+      <button class="principal" id="comecar">Escolher a tela e começar</button>
+      <button id="trocar" disabled>Trocar a tela</button>
+      <button class="perigo" id="parar" disabled>Parar a transmissão</button>
+    </div>
+    <div class="aviso" id="aviso" hidden></div>
+  </section>
+
+  <aside>
+    <div>
+      <h2>Link para assistir</h2>
+      <div class="link"><span id="link">…</span><button id="copiar">Copiar</button></div>
+      <p class="dica">Funciona em qualquer navegador de quem está na mesma rede de jogo, sem instalar nada.</p>
+      <label for="nome">Nome da transmissão</label>
+      <input type="text" id="nome" maxlength="40" placeholder="Ex.: Partida de hoje">
+      <label for="senha">Senha (opcional)</label>
+      <input type="password" id="senha" maxlength="64" placeholder="Sem senha: qualquer um da rede entra">
+    </div>
+
+    <div>
+      <h2>Vídeo</h2>
+      <div class="linha">
+        <div><label for="resolucao">Resolução</label>
+          <select id="resolucao"><option value="720">720p</option><option value="1080" selected>1080p</option><option value="1440">1440p</option><option value="0">Nativa</option></select></div>
+        <div><label for="fps">FPS</label>
+          <select id="fps"><option>30</option><option selected>60</option><option>90</option><option>120</option><option>144</option><option>180</option></select></div>
+      </div>
+      <label>Taxa de bits por pessoa <span class="valor" id="taxaValor"></span></label>
+      <input type="range" id="taxa" min="1" max="25" step="0.5" value="8">
+      <div class="chips">
+        <button class="chip" data-taxa="3">Economia</button>
+        <button class="chip" data-taxa="8">Equilibrado</button>
+        <button class="chip" data-taxa="16">Máxima</button>
+      </div>
+      <p class="dica" id="dicaFps">Acima de 60 FPS, o navegador de quem assiste pode não acompanhar.</p>
+    </div>
+
+    <div>
+      <h2>Som</h2>
+      <label for="somFonte">Som que vai junto</label>
+      <select id="somFonte"><option value="">Nenhum</option></select>
+      <label>Volume do som <span class="valor" id="volSomValor">100%</span></label>
+      <input type="range" id="volSom" min="0" max="150" value="100">
+      <label for="mic">Microfone</label>
+      <select id="mic"><option value="">Desligado</option></select>
+      <label>Volume do microfone <span class="valor" id="volMicValor">100%</span></label>
+      <input type="range" id="volMic" min="0" max="150" value="100">
+      <label for="opus">Qualidade do som</label>
+      <select id="opus"><option value="96">96 kbit/s</option><option value="128">128 kbit/s</option><option value="160" selected>160 kbit/s</option><option value="256">256 kbit/s</option><option value="320">320 kbit/s</option></select>
+      <p class="dica">Para mandar o som de um app só (o jogo, sem as notificações), escolha a saída desse app em Configurações → Som e use o "Monitor" dela aqui.</p>
+    </div>
+
+    <div>
+      <h2>Quem está assistindo <span class="valor" id="contagem"></span></h2>
+      <div class="pessoas" id="pessoas"><p class="dica">Ninguém ainda.</p></div>
+      <p class="dica" id="upload"></p>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const ip = qs.get("ip") || location.hostname;
+const teste = qs.has("teste");   // usa um vídeo desenhado em vez de capturar a tela
+$("link").textContent = `http://${ip}:${location.port || 8787}/`;
+
+let captura = null;              // MediaStream da tela
+let audio = null;                // { ctx, destino, som: {fonte, ganho, stream}, mic: {...} }
+const pares = new Map();         // id -> { pc, nome, estado, bytes, quando, taxa, rtt }
+let fila = [];
+
+function aviso(t) { const a = $("aviso"); a.textContent = t || ""; a.hidden = !t; }
+async function api(caminho, dados) {
+  const r = await fetch(caminho, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dados || {}) });
+  return r.ok;
+}
+function sinal(para, dados) { return api("/api/sinal", { para, dados }); }
+
+// ------------------------------------------------ preferências (guardadas só neste navegador)
+const PREF = "nyxz-share";
+function salvarPref() {
+  try {
+    localStorage.setItem(PREF, JSON.stringify({ nome: $("nome").value, resolucao: $("resolucao").value, fps: $("fps").value,
+      taxa: $("taxa").value, opus: $("opus").value, somFonte: $("somFonte").value, mic: $("mic").value }));
+  } catch (e) {}
+}
+let pref = {};
+try { pref = JSON.parse(localStorage.getItem(PREF) || "{}"); } catch (e) {}
+for (const k of ["nome", "resolucao", "fps", "taxa", "opus"]) if (pref[k]) $(k).value = pref[k];
+
+// ------------------------------------------------ som: mistura sistema + microfone num só canal
+async function listarAudio() {
+  // Os nomes dos dispositivos só aparecem depois da permissão de áudio
+  try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); } catch (e) {}
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
+  const monitores = devs.filter(d => /monitor/i.test(d.label));
+  const outros = devs.filter(d => !/monitor/i.test(d.label) && d.deviceId !== "default" && d.deviceId !== "communications");
+  const preencher = (sel, lista, vazio, padrao) => {
+    sel.innerHTML = `<option value="">${vazio}</option>` + lista.map(d =>
+      `<option value="${d.deviceId}">${(d.label || "Dispositivo").replace(/^Monitor of /, "Som de ")}</option>`).join("");
+    if (padrao && [...sel.options].some(o => o.value === padrao)) sel.value = padrao;
+  };
+  preencher($("somFonte"), monitores.concat(outros), "Nenhum", pref.somFonte || (monitores[0] && monitores[0].deviceId));
+  preencher($("mic"), outros, "Desligado", pref.mic || "");
+}
+
+function garantirMistura() {
+  if (audio) return audio;
+  const ctx = new AudioContext({ sampleRate: 48000 });
+  const destino = ctx.createMediaStreamDestination();
+  destino.channelCount = 2;
+  audio = { ctx, destino, som: null, mic: null };
+  return audio;
+}
+async function ligarEntrada(qual, deviceId, volume) {
+  const a = garantirMistura();
+  if (a.ctx.state === "suspended") await a.ctx.resume();
+  if (a[qual]) { a[qual].stream.getTracks().forEach(t => t.stop()); a[qual].fonte.disconnect(); a[qual] = null; }
+  if (!deviceId) return;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+    deviceId: { exact: deviceId }, channelCount: 2,
+    echoCancellation: false, noiseSuppression: qual === "mic", autoGainControl: false } });
+  const fonte = a.ctx.createMediaStreamSource(stream);
+  const ganho = a.ctx.createGain();
+  ganho.gain.value = volume / 100;
+  fonte.connect(ganho).connect(a.destino);
+  a[qual] = { stream, fonte, ganho };
+}
+function trilhaDeSom() {
+  return audio && (audio.som || audio.mic) ? audio.destino.stream.getAudioTracks()[0] : null;
+}
+
+// ------------------------------------------------ vídeo
+function restricoes() {
+  const h = +$("resolucao").value, fps = +$("fps").value;
+  const r = { frameRate: { ideal: fps, max: fps } };
+  if (h) { r.height = { max: h }; r.width = { max: Math.round(h * 16 / 9) }; }
+  return r;
+}
+function testeCanvas() {
+  const c = document.createElement("canvas"); c.width = 1280; c.height = 720;
+  const g = c.getContext("2d"); let t = 0;
+  // Temporizador (não requestAnimationFrame): continua desenhando com a aba em segundo plano
+  setInterval(function quadro() {
+    t++; g.fillStyle = "#09090D"; g.fillRect(0, 0, 1280, 720);
+    g.fillStyle = "#F4F2F8"; g.font = "600 64px system-ui"; g.fillText("Nyxz Share · teste", 80, 140);
+    g.fillStyle = "#7FB894"; g.beginPath(); g.arc(640 + Math.sin(t / 20) * 400, 420, 60, 0, 7); g.fill();
+    g.fillStyle = "#A09EAA"; g.font = "32px system-ui"; g.fillText(new Date().toLocaleTimeString("pt-BR"), 80, 640);
+  }, 1000 / 30);
+  return c.captureStream(60);
+}
+async function capturar() {
+  if (teste) return testeCanvas();
+  return navigator.mediaDevices.getDisplayMedia({ video: restricoes(), audio: false });
+}
+function aplicarVideo() {
+  const v = captura && captura.getVideoTracks()[0];
+  if (!v) return;
+  const fps = +$("fps").value;
+  v.contentHint = fps >= 60 ? "motion" : "detail";
+  if (!teste) v.applyConstraints(restricoes()).catch(() => {});
+  for (const p of pares.values()) ajustarEnvio(p.pc);
+  $("dicaFps").hidden = fps <= 60;
+  info();
+}
+function ajustarEnvio(pc) {
+  const taxa = Math.round(+$("taxa").value * 1e6), fps = +$("fps").value;
+  for (const s of pc.getSenders()) {
+    if (!s.track) continue;
+    const par = s.getParameters();
+    if (!par.encodings || !par.encodings.length) par.encodings = [{}];
+    if (s.track.kind === "video") {
+      par.encodings[0].maxBitrate = taxa;
+      par.encodings[0].maxFramerate = fps;
+      par.degradationPreference = fps >= 60 ? "maintain-framerate" : "maintain-resolution";
+    } else {
+      par.encodings[0].maxBitrate = +$("opus").value * 1000;
+    }
+    s.setParameters(par).catch(() => {});
+  }
+}
+function opusEstereo(sdp) {
+  // Opus estéreo na qualidade escolhida (o padrão do navegador é mono ~32 kbit/s)
+  const m = sdp.match(/a=rtpmap:(\d+) opus\/48000/i);
+  if (!m) return sdp;
+  const pt = m[1], kbps = +$("opus").value;
+  return sdp.replace(new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`), (l, p) =>
+    `a=fmtp:${pt} ${p.replace(/;?(stereo|sprop-stereo|maxaveragebitrate)=[^;]*/g, "")};stereo=1;sprop-stereo=1;maxaveragebitrate=${kbps * 1000}`);
+}
+
+// ------------------------------------------------ uma conexão por pessoa (direto de PC para PC)
+async function conectar(id, nome) {
+  if (!captura) return;
+  fechar(id);
+  const pc = new RTCPeerConnection({ iceServers: [] });   // mesma LAN virtual: sem STUN/TURN
+  const p = { pc, nome, estado: "conectando", bytes: 0, quando: 0, taxa: 0, rtt: null };
+  pares.set(id, p);
+  pc.addTrack(captura.getVideoTracks()[0], captura);
+  const som = trilhaDeSom();
+  if (som) pc.addTrack(som, captura);
+  pc.onicecandidate = e => { if (e.candidate) sinal(id, { candidato: e.candidate.toJSON() }); };
+  pc.onconnectionstatechange = () => { p.estado = pc.connectionState; if (pc.connectionState === "connected") ajustarEnvio(pc); desenharPessoas(); };
+  const oferta = await pc.createOffer();
+  oferta.sdp = opusEstereo(oferta.sdp);
+  await pc.setLocalDescription(oferta);
+  await sinal(id, { sdp: pc.localDescription.toJSON() });
+  desenharPessoas();
+}
+function fechar(id) {
+  const p = pares.get(id);
+  if (p) { p.pc.close(); pares.delete(id); }
+}
+async function recado(de, dados) {
+  const p = pares.get(de);
+  if (!p) return;
+  if (dados.sdp) await p.pc.setRemoteDescription(dados.sdp);
+  else if (dados.candidato) await p.pc.addIceCandidate(dados.candidato).catch(() => {});
+}
+
+// ------------------------------------------------ eventos do servidor
+const espera = new Map();   // quem entrou antes de começarmos a transmitir
+const eventos = new EventSource("/api/eventos/transmissor");
+eventos.onmessage = async m => {
+  const ev = JSON.parse(m.data);
+  if (ev.tipo === "entrou") { espera.set(ev.id, ev.nome); if (captura) conectar(ev.id, ev.nome); desenharPessoas(); }
+  else if (ev.tipo === "saiu") { espera.delete(ev.id); fechar(ev.id); desenharPessoas(); }
+  else if (ev.tipo === "sinal") recado(ev.de, ev.dados);
+};
+eventos.onerror = () => aviso(eventos.readyState === 2 ? "Perdeu a conexão com o Nyxz Share. Ele foi desligado?" : "");
+
+// ------------------------------------------------ começar, trocar, parar
+async function comecar() {
+  aviso("");
+  try {
+    const nova = await capturar();
+    const v = nova.getVideoTracks()[0];
+    v.onended = parar;     // "Parar compartilhamento" do próprio navegador/portal
+    if (captura) {
+      for (const p of pares.values()) {
+        const s = p.pc.getSenders().find(x => x.track && x.track.kind === "video");
+        if (s) await s.replaceTrack(v);
+      }
+      captura.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    }
+    captura = nova;
+    $("video").srcObject = captura;
+    $("previa").classList.add("ativa");
+    await ligarEntrada("som", $("somFonte").value, +$("volSom").value).catch(e => aviso("Não deu para pegar o som: " + e.message));
+    await ligarEntrada("mic", $("mic").value, +$("volMic").value).catch(e => aviso("Não deu para pegar o microfone: " + e.message));
+    aplicarVideo();
+    await api("/api/config", { transmitindo: true, nome: $("nome").value || "Tela compartilhada", senha: $("senha").value });
+    for (const [id, nome] of espera) if (!pares.has(id)) conectar(id, nome);
+    estadoBotoes();
+  } catch (e) {
+    if (e.name !== "NotAllowedError") aviso("Não deu para capturar a tela: " + e.message);
+  }
+}
+async function parar() {
+  for (const id of [...pares.keys()]) fechar(id);
+  if (captura) captura.getTracks().forEach(t => { t.onended = null; t.stop(); });
+  captura = null;
+  for (const q of ["som", "mic"]) if (audio && audio[q]) await ligarEntrada(q, "", 0);
+  $("video").srcObject = null;
+  $("previa").classList.remove("ativa");
+  await api("/api/config", { transmitindo: false });
+  estadoBotoes();
+  desenharPessoas();
+}
+function estadoBotoes() {
+  const vivo = !!captura;
+  $("comecar").disabled = vivo; $("trocar").disabled = !vivo; $("parar").disabled = !vivo;
+  const s = $("status");
+  s.classList.toggle("vivo", vivo);
+  s.querySelector("span").textContent = vivo ? `Ao vivo · ${pares.size} assistindo` : "Parado";
+}
+function info() {
+  if (!captura) return;
+  const st = captura.getVideoTracks()[0].getSettings();
+  api("/api/config", { info: { largura: st.width || 0, altura: st.height || 0, fps: +$("fps").value } });
+}
+
+// ------------------------------------------------ lista de quem assiste (com taxa e atraso)
+function desenharPessoas() {
+  const lista = $("pessoas");
+  const itens = [...espera.entries()];
+  $("contagem").textContent = itens.length ? `(${itens.length})` : "";
+  if (!itens.length) { lista.innerHTML = '<p class="dica">Ninguém ainda.</p>'; $("upload").textContent = ""; estadoBotoes(); return; }
+  lista.innerHTML = "";
+  for (const [id, nome] of itens) {
+    const p = pares.get(id);
+    const div = document.createElement("div");
+    div.className = "pessoa";
+    const ok = p && p.estado === "connected";
+    const meta = !captura ? "esperando você começar" : !p ? "…" : ok
+      ? `${(p.taxa / 1e6).toFixed(1).replace(".", ",")} Mbit/s${p.rtt != null ? " · " + p.rtt + " ms" : ""}`
+      : ({ connecting: "conectando", new: "conectando", failed: "falhou", disconnected: "caiu" }[p.estado] || p.estado);
+    div.innerHTML = `<i class="${ok ? "ok" : ""}"></i><span class="nome"></span><span class="meta"></span><button>Remover</button>`;
+    div.querySelector(".nome").textContent = nome;
+    div.querySelector(".meta").textContent = meta;
+    div.querySelector("button").onclick = () => { api("/api/remover", { id }); fechar(id); espera.delete(id); desenharPessoas(); };
+    lista.appendChild(div);
+  }
+  const total = [...pares.values()].reduce((s, p) => s + p.taxa, 0);
+  $("upload").textContent = captura && total ? `Usando ${(total / 1e6).toFixed(1).replace(".", ",")} Mbit/s do seu upload no total (cada pessoa recebe a própria cópia).` : "";
+  estadoBotoes();
+}
+setInterval(async () => {
+  for (const p of pares.values()) {
+    if (p.pc.connectionState !== "connected") continue;
+    const st = await p.pc.getStats();
+    let bytes = 0;
+    st.forEach(r => {
+      if (r.type === "outbound-rtp") bytes += r.bytesSent || 0;
+      if (r.type === "candidate-pair" && r.nominated && r.currentRoundTripTime != null) p.rtt = Math.round(r.currentRoundTripTime * 1000);
+    });
+    const agora = performance.now();
+    if (p.quando) p.taxa = (bytes - p.bytes) * 8 / ((agora - p.quando) / 1000);
+    p.bytes = bytes; p.quando = agora;
+  }
+  desenharPessoas();
+}, 2000);
+
+// ------------------------------------------------ controles
+$("comecar").onclick = comecar;
+$("trocar").onclick = comecar;
+$("parar").onclick = parar;
+$("copiar").onclick = () => navigator.clipboard.writeText($("link").textContent).then(() => { $("copiar").textContent = "Copiado"; setTimeout(() => $("copiar").textContent = "Copiar", 1500); });
+const mostrarTaxa = () => {
+  $("taxaValor").textContent = `${(+$("taxa").value).toLocaleString("pt-BR")} Mbit/s`;
+  document.querySelectorAll(".chip").forEach(c => c.classList.toggle("ativo", +c.dataset.taxa === +$("taxa").value));
+};
+$("taxa").oninput = () => { mostrarTaxa(); aplicarVideo(); salvarPref(); };
+document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("taxa").value = c.dataset.taxa; $("taxa").oninput(); });
+$("resolucao").onchange = $("fps").onchange = () => { aplicarVideo(); salvarPref(); };
+$("opus").onchange = () => { for (const p of pares.values()) ajustarEnvio(p.pc); salvarPref(); };
+$("nome").onchange = () => { api("/api/config", { nome: $("nome").value }); salvarPref(); };
+$("senha").onchange = () => api("/api/config", { senha: $("senha").value });
+for (const [sel, vol, qual] of [["somFonte", "volSom", "som"], ["mic", "volMic", "mic"]]) {
+  $(sel).onchange = async () => {
+    salvarPref();
+    if (!captura) return;
+    const tinha = !!trilhaDeSom();
+    await ligarEntrada(qual, $(sel).value, +$(vol).value).catch(e => aviso(e.message));
+    // Se o som acabou de aparecer, as conexões precisam ganhar a trilha de áudio
+    if (!tinha && trilhaDeSom()) for (const [id, nome] of espera) conectar(id, nome);
+  };
+  $(vol).oninput = () => {
+    $(vol + "Valor").textContent = $(vol).value + "%";
+    if (audio && audio[qual]) audio[qual].ganho.gain.value = $(vol).value / 100;
+  };
+}
+mostrarTaxa();
+listarAudio();
+window.addEventListener("beforeunload", () => navigator.sendBeacon && navigator.sendBeacon("/api/config", new Blob([JSON.stringify({ transmitindo: false })], { type: "application/json" })));
+</script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+#!/usr/bin/python3 -I
+# Nyxz Share v1 (compartilhar a tela pela LAN): o próprio PC serve as páginas e passa os
+# recados (sinalização WebRTC) entre quem transmite e quem assiste. O vídeo e o som vão
+# direto de PC para PC pela LAN virtual: sem servidor nosso nem de terceiros no meio.
+#
+#   share iniciar <ip>      liga o servidor neste IP da LAN virtual (e em 127.0.0.1)
+#                           e abre a página de transmitir no navegador
+#   share parar             desliga
+#   share estado            JSON: ligado? em qual IP? transmitindo? quantos assistem?
+#   share procurar <ip>     transmissões abertas na mesma rede (/24) desse IP
+#   share assistir <ip>     abre a página de assistir no navegador
+#   share servir <ip>       (uso interno: é o que roda dentro do serviço)
+#
+# Páginas: http://<ip>:8787/ (assistir, qualquer navegador da rede) e
+# http://127.0.0.1:8787/transmitir (só neste PC).
+import concurrent.futures
+import hmac
+import ipaddress
+import json
+import os
+import queue
+import secrets
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+PORTA = 8787
+UNIDADE = "nyxz-share"
+PAGINAS = Path(os.environ.get("NYXZ_SHARE_PAGINAS", "/usr/share/nyxz/share"))
+MARCA = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "nyxz-share-ativo"
+CONF = Path.home() / ".config/nyxz/share.json"
+
+
+# ---------------------------------------------------------------- estado da sala (em memória)
+class Sala:
+    def __init__(self):
+        self.trava = threading.Lock()
+        self.transmissor = None             # fila de eventos da página de transmitir
+        self.espectadores = {}              # id -> {"nome", "fila", "desde"}
+        self.transmitindo = False
+        self.senha = ""
+        self.nome = ""
+        self.info = {}
+
+    def para_transmissor(self, ev):
+        if self.transmissor:
+            self.transmissor.put(ev)
+
+    def para(self, eid, ev):
+        e = self.espectadores.get(eid)
+        if e:
+            e["fila"].put(ev)
+
+
+SALA = Sala()
+
+
+def local(endereco):
+    return endereco in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+class Pedido(BaseHTTPRequestHandler):
+    server_version = "NyxzShare/1"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    # ------------------------------------------------ respostas
+    def json(self, codigo, dados):
+        corpo = json.dumps(dados, ensure_ascii=False).encode()
+        self.send_response(codigo)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(corpo)))
+        self.end_headers()
+        self.wfile.write(corpo)
+
+    def pagina(self, nome):
+        arq = PAGINAS / nome
+        if not arq.is_file():
+            self.send_error(404)
+            return
+        corpo = arq.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        # Nada de fora: a página não carrega nada da internet
+        self.send_header("Content-Security-Policy",
+                         "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                         "img-src 'self' data:; media-src 'self' blob:; connect-src 'self'")
+        self.send_header("Content-Length", str(len(corpo)))
+        self.end_headers()
+        self.wfile.write(corpo)
+
+    def corpo(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > 256 * 1024:
+            return None
+        try:
+            return json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            return None
+
+    def eventos(self, fila, ao_sair):
+        """Server-Sent Events: um JSON por evento; comentário a cada 15 s mantém a conexão."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        try:
+            while True:
+                try:
+                    ev = fila.get(timeout=15)
+                except queue.Empty:
+                    self.wfile.write(b": oi\n\n")
+                    self.wfile.flush()
+                    continue
+                if ev is None:
+                    break
+                self.wfile.write(b"data: " + json.dumps(ev, ensure_ascii=False).encode() + b"\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            ao_sair()
+
+    # ------------------------------------------------ GET
+    def do_GET(self):
+        caminho, _, consulta = self.path.partition("?")
+        cliente = self.client_address[0]
+        if caminho in ("/", "/assistir"):
+            return self.pagina("assistir.html")
+        if caminho == "/transmitir":
+            if not local(cliente):
+                return self.send_error(403, "Só no PC de quem transmite")
+            return self.pagina("transmitir.html")
+        if caminho == "/api/estado":
+            with SALA.trava:
+                return self.json(200, {"nyxz": "share", "transmitindo": SALA.transmitindo,
+                                       "nome": SALA.nome, "espectadores": len(SALA.espectadores),
+                                       "protegida": bool(SALA.senha), "info": SALA.info})
+        if caminho == "/api/eventos/transmissor":
+            if not local(cliente):
+                return self.send_error(403)
+            fila = queue.Queue()
+            with SALA.trava:
+                if SALA.transmissor:
+                    SALA.transmissor.put(None)      # outra aba de transmitir assume
+                SALA.transmissor = fila
+                atuais = [{"tipo": "entrou", "id": i, "nome": e["nome"]} for i, e in SALA.espectadores.items()]
+            for ev in atuais:
+                fila.put(ev)
+
+            def saiu():
+                with SALA.trava:
+                    if SALA.transmissor is fila:
+                        SALA.transmissor = None
+                        SALA.transmitindo = False
+                        marcar(False)
+                        for e in SALA.espectadores.values():
+                            e["fila"].put({"tipo": "fim"})
+            return self.eventos(fila, saiu)
+        if caminho == "/api/eventos/espectador":
+            eid = dict(p.split("=", 1) for p in consulta.split("&") if "=" in p).get("id", "")
+            with SALA.trava:
+                e = SALA.espectadores.get(eid)
+            if not e:
+                return self.send_error(404)
+
+            def saiu():
+                with SALA.trava:
+                    if SALA.espectadores.pop(eid, None):
+                        SALA.para_transmissor({"tipo": "saiu", "id": eid})
+            return self.eventos(e["fila"], saiu)
+        self.send_error(404)
+
+    # ------------------------------------------------ POST
+    def do_POST(self):
+        cliente = self.client_address[0]
+        d = self.corpo()
+        if d is None:
+            return self.send_error(400)
+        if self.path == "/api/entrar":
+            with SALA.trava:
+                if not SALA.transmitindo:
+                    return self.json(409, {"erro": "Ninguém está transmitindo agora."})
+                if SALA.senha and not hmac.compare_digest(str(d.get("senha", "")), SALA.senha):
+                    return self.json(403, {"erro": "Senha errada."})
+                if len(SALA.espectadores) >= 12:
+                    return self.json(429, {"erro": "A sala está cheia."})
+                eid = secrets.token_hex(8)
+                nome = str(d.get("nome") or "Alguém")[:32]
+                SALA.espectadores[eid] = {"nome": nome, "fila": queue.Queue(), "desde": time.time(), "ip": cliente}
+                SALA.para_transmissor({"tipo": "entrou", "id": eid, "nome": nome})
+            return self.json(200, {"id": eid, "nome": SALA.nome})
+        if self.path == "/api/sinal":
+            # Recados WebRTC (oferta, resposta, candidatos) entre transmissor e espectador
+            para, dados = str(d.get("para", "")), d.get("dados")
+            with SALA.trava:
+                if para == "transmissor":
+                    de = str(d.get("de", ""))
+                    if de not in SALA.espectadores:
+                        return self.send_error(403)
+                    SALA.para_transmissor({"tipo": "sinal", "de": de, "dados": dados})
+                else:
+                    if not local(cliente):
+                        return self.send_error(403)
+                    SALA.para(para, {"tipo": "sinal", "dados": dados})
+            return self.json(200, {})
+        # Daqui para baixo, só a página de transmitir (neste PC)
+        if not local(cliente):
+            return self.send_error(403)
+        if self.path == "/api/config":
+            with SALA.trava:
+                if "senha" in d:
+                    SALA.senha = str(d["senha"])[:64]
+                if "nome" in d:
+                    SALA.nome = str(d["nome"])[:40]
+                if "info" in d and isinstance(d["info"], dict):
+                    SALA.info = {k: d["info"][k] for k in list(d["info"])[:8]}
+                if "transmitindo" in d:
+                    SALA.transmitindo = bool(d["transmitindo"])
+                    marcar(SALA.transmitindo)
+                    if not SALA.transmitindo:
+                        for e in SALA.espectadores.values():
+                            e["fila"].put({"tipo": "fim"})
+            return self.json(200, {})
+        if self.path == "/api/remover":
+            with SALA.trava:
+                e = SALA.espectadores.pop(str(d.get("id", "")), None)
+            if e:
+                e["fila"].put({"tipo": "removido"})
+                e["fila"].put(None)
+            return self.json(200, {})
+        self.send_error(404)
+
+
+def marcar(ativo):
+    """Arquivo que a barra observa para mostrar "transmitindo"."""
+    try:
+        if ativo:
+            MARCA.touch()
+        else:
+            MARCA.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def ips_lan():
+    r = subprocess.run(["ip", "-j", "-4", "addr", "show"], capture_output=True, text=True)
+    try:
+        dados = json.loads(r.stdout or "[]")
+    except ValueError:
+        return []
+    return [a["local"] for i in dados if i.get("ifname", "").startswith("zt")
+            for a in i.get("addr_info", []) if a.get("family") == "inet"]
+
+
+def servir(ip):
+    # Um servidor no IP da LAN virtual e outro em 127.0.0.1 (a página de transmitir).
+    # Nunca em 0.0.0.0: ninguém de fora da LAN virtual alcança.
+    servidores = [ThreadingHTTPServer((h, PORTA), Pedido) for h in dict.fromkeys([ip, "127.0.0.1"])]
+    for s in servidores:
+        s.daemon_threads = True
+    for s in servidores[1:]:
+        threading.Thread(target=s.serve_forever, daemon=True).start()
+    try:
+        servidores[0].serve_forever()
+    finally:
+        marcar(False)
+
+
+# ---------------------------------------------------------------- comandos
+def ativo():
+    return subprocess.run(["systemctl", "--user", "is-active", "--quiet", UNIDADE]).returncode == 0
+
+
+def ler_conf():
+    try:
+        return json.loads(CONF.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def estado():
+    c = ler_conf()
+    saida = {"ligado": ativo(), "ip": c.get("ip", ""), "transmitindo": False, "espectadores": 0}
+    if saida["ligado"]:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{PORTA}/api/estado", timeout=2) as r:
+                d = json.loads(r.read())
+            saida.update(transmitindo=d["transmitindo"], espectadores=d["espectadores"])
+        except Exception:
+            pass
+    else:
+        saida["ip"] = ""
+    print(json.dumps(saida))
+
+
+def abrir_navegador(url):
+    subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def iniciar(ip):
+    if ip != "127.0.0.1" and ip not in ips_lan():
+        sys.exit("Esse IP não é deste PC numa rede de jogo ligada.")
+    CONF.parent.mkdir(parents=True, exist_ok=True)
+    CONF.write_text(json.dumps({"ip": ip}))
+    subprocess.run(["systemctl", "--user", "stop", UNIDADE], capture_output=True)
+    subprocess.run(["systemctl", "--user", "reset-failed", UNIDADE], capture_output=True)
+    r = subprocess.run(["systemd-run", "--user", "--quiet", "--collect", f"--unit={UNIDADE}",
+                        "--description=Nyxz Share", "/usr/libexec/nyxz/share", "servir", ip],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("O Share não ligou: " + r.stderr.strip())
+    for _ in range(30):
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{PORTA}/api/estado", timeout=0.5).read()
+            break
+        except Exception:
+            time.sleep(0.2)
+    abrir_navegador(f"http://127.0.0.1:{PORTA}/transmitir?ip={ip}")
+
+
+def sondar(ip):
+    try:
+        with socket.create_connection((ip, PORTA), timeout=0.4):
+            pass
+        with urllib.request.urlopen(f"http://{ip}:{PORTA}/api/estado", timeout=1.5) as r:
+            d = json.loads(r.read())
+        if d.get("nyxz") == "share" and d.get("transmitindo"):
+            return {"ip": ip, "nome": d.get("nome", ""), "espectadores": d.get("espectadores", 0),
+                    "protegida": d.get("protegida", False), "minha": ip in ips_lan()}
+    except Exception:
+        return None
+
+
+def procurar(ip):
+    rede = ipaddress.ip_network(f"{ip}/24", strict=False)
+    with concurrent.futures.ThreadPoolExecutor(64) as ex:
+        achadas = [r for r in ex.map(sondar, [str(h) for h in rede.hosts()]) if r]
+    print(json.dumps(achadas, ensure_ascii=False))
+
+
+def main():
+    a = sys.argv[1:]
+    if a and a[0] in ("iniciar", "procurar", "assistir", "servir") and len(a) == 2:
+        try:
+            ipaddress.IPv4Address(a[1])
+        except ValueError:
+            sys.exit("IP inválido.")
+    if not a or a[0] == "estado":
+        estado()
+    elif a[0] == "iniciar" and len(a) == 2:
+        iniciar(a[1])
+    elif a == ["parar"]:
+        subprocess.run(["systemctl", "--user", "stop", UNIDADE], capture_output=True)
+        marcar(False)
+    elif a[0] == "procurar" and len(a) == 2:
+        procurar(a[1])
+    elif a[0] == "assistir" and len(a) == 2:
+        abrir_navegador(f"http://{a[1]}:{PORTA}/")
+    elif a[0] == "servir" and len(a) == 2:
+        servir(a[1])
+    else:
+        sys.exit("uso: share iniciar <ip>|parar|estado|procurar <ip>|assistir <ip>")
+
+
+if __name__ == "__main__":
+    main()

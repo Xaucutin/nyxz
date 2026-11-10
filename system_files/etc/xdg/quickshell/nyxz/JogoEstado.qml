@@ -8,11 +8,13 @@ import Quickshell.Io
 //   $XDG_RUNTIME_DIR/nyxz-modo-jogo.json   (modo-jogo)
 //   $XDG_RUNTIME_DIR/nyxz-replay-ativo     (serviço nyxz-replay)
 //   $XDG_RUNTIME_DIR/nyxz-streaming-ativo  (serviço nyxz-streaming, Sunshine)
+//   $XDG_RUNTIME_DIR/nyxz-share-ativo      (Nyxz Share transmitindo)
 Singleton {
     readonly property string pasta: Quickshell.env("XDG_RUNTIME_DIR")
     property bool modoJogo: false
     property bool replay: false
     property bool streaming: false
+    property bool share: false
     property bool temStreaming: false   // Sunshine instalado (Apps e componentes)
 
     FileView {
@@ -33,6 +35,12 @@ Singleton {
         onLoaded: streaming = true
         onLoadFailed: streaming = false
     }
+    FileView {
+        id: compartilhando
+        printErrors: false
+        onLoaded: share = true
+        onLoadFailed: share = false
+    }
     Process {
         id: confereSunshine
         command: ["test", "-x", "/usr/bin/sunshine"]
@@ -43,12 +51,13 @@ Singleton {
         jogo.path = pasta + "/nyxz-modo-jogo.json";
         gravando.path = pasta + "/nyxz-replay-ativo";
         transmitindo.path = pasta + "/nyxz-streaming-ativo";
+        compartilhando.path = pasta + "/nyxz-share-ativo";
     }
     Timer {
         interval: 2000
         running: true
         repeat: true
-        onTriggered: { jogo.reload(); gravando.reload(); transmitindo.reload(); }
+        onTriggered: { jogo.reload(); gravando.reload(); transmitindo.reload(); compartilhando.reload(); }
     }
 
     function alternarModoJogo() {

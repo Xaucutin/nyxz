@@ -58,6 +58,35 @@ Pagina {
             procura.running = true;
         }
     }
+    // Nyxz Share: servidor ligado aqui e transmissões achadas nas redes ligadas
+    property bool shareLigado: false
+    property string shareIp: ""
+    property bool shareTransmitindo: false
+    property var transmissoes: []
+    property var _transmissoes: []
+    Comando {
+        id: cmdShare
+        onPronto: s => {
+            try { const d = JSON.parse(s); p.shareLigado = d.ligado; p.shareIp = d.ip; p.shareTransmitindo = d.transmitindo; } catch (e) {}
+        }
+    }
+    Process {
+        id: procuraShare
+        stdout: SplitParser {
+            onRead: linha => { try { p._transmissoes = p._transmissoes.concat(JSON.parse(linha)); } catch (e) {} }
+        }
+        onExited: { p.transmissoes = p._transmissoes; p._transmissoes = []; }
+    }
+    Timer {
+        interval: 8000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            cmdShare.rodar(["/usr/libexec/nyxz/share", "estado"]);
+            const ips = p.redes.filter(r => r.ligada && r.status === "OK" && r.ip).map(r => r.ip.split(",")[0].trim());
+            if (!ips.length || procuraShare.running) { if (!ips.length) p.transmissoes = []; return; }
+            procuraShare.command = ["sh", "-c", 'for ip; do /usr/libexec/nyxz/share procurar "$ip"; done', "sh"].concat(ips);
+            procuraShare.running = true;
+        }
+    }
     Timer { id: limpa; interval: 7000; onTriggered: p.aviso = "" }
 
     Comando {
@@ -280,6 +309,72 @@ Pagina {
                         wrapMode: Text.Wrap
                         text: "Ninguém entrou ainda. Mande o código para os amigos; quando alguém pedir para entrar, aparece aqui para você aprovar. Clique no código de alguém para dar um apelido."
                         font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto4
+                    }
+
+                    // ------------------------------ Nyxz Share (tela pela LAN)
+                    ColumnLayout {
+                        id: share
+                        readonly property string meuIp: cartao.modelData.ip.split(",")[0].trim()
+                        readonly property string prefixo: meuIp.split(".").slice(0, 3).join(".") + "."
+                        readonly property var lista: p.transmissoes.filter(t => t.ip.indexOf(prefixo) === 0 && !t.minha)
+                        readonly property bool meu: p.shareLigado && p.shareIp === meuIp
+                        visible: cartao.modelData.ligada && cartao.modelData.status === "OK" && meuIp !== ""
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 6
+
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Tema.borda }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Image { source: "icones/tela.svg"; sourceSize: Qt.size(15, 15); opacity: 0.8 }
+                            Text {
+                                Layout.fillWidth: true
+                                text: share.meu ? (p.shareTransmitindo ? "Você está transmitindo a tela" : "Nyxz Share ligado: escolha a tela no navegador")
+                                    : share.lista.length ? "Transmissões nesta rede" : "Compartilhar a tela com quem está nesta rede"
+                                elide: Text.ElideRight
+                                font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto2
+                            }
+                            Botao {
+                                visible: !share.meu
+                                texto: "Transmitir a tela"
+                                ativo: !acao.running
+                                onClicado: acao.rodar(["/usr/libexec/nyxz/share", "iniciar", share.meuIp], "Escolha a tela no navegador. O link para os amigos é http://" + share.meuIp + ":8787")
+                            }
+                            Botao {
+                                visible: share.meu
+                                texto: "Abrir o painel"
+                                onClicado: Quickshell.execDetached(["xdg-open", "http://127.0.0.1:8787/transmitir?ip=" + share.meuIp])
+                            }
+                            Botao {
+                                visible: share.meu
+                                texto: "Desligar"
+                                perigo: true
+                                onClicado: acao.rodar(["/usr/libexec/nyxz/share", "parar"], "Nyxz Share desligado.")
+                            }
+                        }
+                        Repeater {
+                            model: share.lista
+                            delegate: RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 25
+                                spacing: 10
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (modelData.nome || "Tela de " + modelData.ip) + "  ·  "
+                                          + (modelData.espectadores === 1 ? "1 assistindo" : modelData.espectadores + " assistindo")
+                                          + (modelData.protegida ? "  ·  com senha" : "")
+                                    elide: Text.ElideRight
+                                    font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto
+                                }
+                                Botao {
+                                    texto: "Assistir"
+                                    principal: true
+                                    onClicado: Quickshell.execDetached(["/usr/libexec/nyxz/share", "assistir", modelData.ip])
+                                }
+                            }
+                        }
                     }
 
                     // ------------------------------ Voz pela LAN (rede ligada e com IP)
