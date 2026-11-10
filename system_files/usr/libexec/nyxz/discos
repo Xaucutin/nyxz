@@ -1,0 +1,182 @@
+#!/usr/bin/python3 -I
+# Saúde dos discos (Configurações → Discos), do lado do usuário.
+#
+#   discos estado                JSON: fichas (do timer, /var/lib/nyxz/discos.json) +
+#                                histórico de 60 dias + testes de velocidade
+#   discos verificar             lê o SMART agora (pkexec, sem senha na sessão ativa)
+#   discos teste curto|longo <disco>
+#   discos velocidade [pasta]    teste estilo CrystalDiskMark com o fio (≈1 min)
+#   discos alertar               notifica se algo piorou (chamado ao mudar o discos.json)
+import datetime
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ESTADO = Path("/var/lib/nyxz/discos.json")
+HISTORICO = Path("/var/lib/nyxz/discos-historico.jsonl")
+VELOCIDADE = Path.home() / ".local/share/nyxz/discos-velocidade.json"
+VISTO = Path.home() / ".cache/nyxz/discos-visto.json"
+ROOT = "/usr/libexec/nyxz/nyxz-discos-root"
+LIMITE_TEMP = {"NVMe": 70, "SSD SATA": 60, "HD": 55}
+
+
+def ler_json(p, padrao):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return padrao
+
+
+def historico():
+    limite = (datetime.date.today() - datetime.timedelta(days=60)).isoformat()
+    saida = {}
+    try:
+        for linha in HISTORICO.read_text().splitlines():
+            try:
+                r = json.loads(linha)
+            except ValueError:
+                continue
+            if r.get("dia", "") >= limite:
+                saida.setdefault(r["serie"], []).append(r)
+    except OSError:
+        pass
+    return saida
+
+
+def previsao(registros):
+    """Vida útil restante no ritmo atual (NVMe): % usada por dia nos últimos registros."""
+    pontos = [(datetime.date.fromisoformat(r["dia"]), r["vida_usada"]) for r in registros if r.get("vida_usada") is not None]
+    if len(pontos) < 2:
+        return None
+    (d0, v0), (d1, v1) = pontos[0], pontos[-1]
+    dias = (d1 - d0).days
+    if dias < 14 or v1 <= v0:
+        return None
+    por_dia = (v1 - v0) / dias
+    return round((100 - v1) / por_dia / 365, 1)   # anos
+
+
+def estado():
+    e = ler_json(ESTADO, {"quando": "", "discos": []})
+    h = historico()
+    for d in e["discos"]:
+        regs = h.get(d["serie"] or d["disco"], [])
+        # Escrita por dia: diferença do total escrito entre um dia e o anterior
+        por_dia = []
+        for a, b in zip(regs, regs[1:]):
+            if a.get("escrito") is not None and b.get("escrito") is not None:
+                por_dia.append({"dia": b["dia"], "bytes": max(0, b["escrito"] - a["escrito"])})
+        d["historico"] = {"escrita_dia": por_dia[-30:],
+                          "temperatura": [{"dia": r["dia"], "max": r.get("temperatura_max")} for r in regs][-30:],
+                          "anos_restantes": previsao(regs)}
+    e["velocidade"] = ler_json(VELOCIDADE, [])[-10:]
+    e["fio"] = shutil.which("fio") is not None
+    print(json.dumps(e, ensure_ascii=False))
+
+
+def root(*args):
+    r = subprocess.run(["pkexec", ROOT, *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(r.stderr.strip()[-300:] or "Não foi possível ler os discos.")
+
+
+# ---------------------------------------------------------------- teste de velocidade
+TESTES = [  # (nome, padrão de acesso, bloco, fila)
+    ("SEQ1M Q8T1", "read", "1M", 8), ("SEQ1M Q1T1", "read", "1M", 1),
+    ("RND4K Q32T1", "randread", "4k", 32), ("RND4K Q1T1", "randread", "4k", 1),
+]
+
+
+def fio(arquivo, rw, bloco, fila):
+    r = subprocess.run(["fio", "--name=nyxz", f"--filename={arquivo}", "--size=512M", f"--rw={rw}", f"--bs={bloco}",
+                        f"--iodepth={fila}", "--numjobs=1", "--ioengine=libaio", "--direct=1", "--runtime=4",
+                        "--time_based", "--group_reporting", "--output-format=json"], capture_output=True, text=True)
+    try:
+        job = json.loads(r.stdout)["jobs"][0]
+    except (ValueError, KeyError, IndexError):
+        return None
+    lado = job["write" if "write" in rw else "read"]
+    return round(lado["bw_bytes"] / 1e6, 1), round(lado["iops"])
+
+
+def velocidade(pasta):
+    if not shutil.which("fio"):
+        sys.exit("O fio não está instalado nesta versão.")
+    pasta = Path(pasta).expanduser()
+    if not pasta.is_dir():
+        sys.exit("Pasta não encontrada.")
+    livre = shutil.disk_usage(pasta).free
+    if livre < 2 * 1024 ** 3:
+        sys.exit("Precisa de pelo menos 2 GB livres nessa pasta para o teste.")
+    arquivo = pasta / ".nyxz-teste-velocidade"
+    resultado = {"quando": datetime.datetime.now().isoformat(timespec="minutes"), "pasta": str(pasta), "testes": []}
+    try:
+        for nome, rw, bloco, fila in TESTES:
+            print(json.dumps({"progresso": f"{nome} leitura"}), flush=True)
+            le = fio(arquivo, rw, bloco, fila)
+            print(json.dumps({"progresso": f"{nome} escrita"}), flush=True)
+            es = fio(arquivo, rw.replace("read", "write"), bloco, fila)
+            resultado["testes"].append({"nome": nome, "leitura": le[0] if le else None, "escrita": es[0] if es else None,
+                                        "iops_leitura": le[1] if le else None, "iops_escrita": es[1] if es else None})
+    finally:
+        arquivo.unlink(missing_ok=True)
+    lista = ler_json(VELOCIDADE, [])
+    lista.append(resultado)
+    VELOCIDADE.parent.mkdir(parents=True, exist_ok=True)
+    VELOCIDADE.write_text(json.dumps(lista[-30:], ensure_ascii=False))
+    print(json.dumps({"fim": resultado}, ensure_ascii=False), flush=True)
+
+
+# ---------------------------------------------------------------- avisos
+def alertar():
+    e = ler_json(ESTADO, {"discos": []})
+    visto = ler_json(VISTO, {})
+    ordem = {"bom": 0, "desconhecido": 0, "atencao": 1, "ruim": 2}
+    novo = {}
+    for d in e["discos"]:
+        chave = d["serie"] or d["disco"]
+        antes = visto.get(chave, {})
+        erros = sum(int(d.get(k) or 0) for k in ("erros_midia",)) + sum(
+            int(a["bruto"].split()[0]) for a in d.get("atributos", []) if a["id"] in (5, 197, 198) and a["bruto"].split()[0].isdigit())
+        novo[chave] = {"estado": d["estado"], "erros": erros}
+        nome = f"{d['modelo']} ({d['nome']})"
+        if ordem.get(d["estado"], 0) > ordem.get(antes.get("estado", "bom"), 0):
+            aviso("Saúde do disco piorou", f"{nome}: {d['motivos'][0]}", critico=d["estado"] == "ruim")
+        elif antes and erros > antes.get("erros", 0):
+            aviso("Erro novo no disco", f"{nome}: {erros - antes.get('erros', 0)} erro(s) novo(s). Veja em Configurações → Discos.")
+        limite = LIMITE_TEMP.get(d.get("tipo"), 60)
+        if d.get("temperatura") and d["temperatura"] >= limite and not antes.get("quente"):
+            aviso("Disco quente", f"{nome} está a {d['temperatura']} °C. Confira a ventilação.")
+            novo[chave]["quente"] = True
+        elif d.get("temperatura") and d["temperatura"] >= limite - 5 and antes.get("quente"):
+            novo[chave]["quente"] = True    # só avisa de novo depois de esfriar
+    VISTO.parent.mkdir(parents=True, exist_ok=True)
+    VISTO.write_text(json.dumps(novo))
+
+
+def aviso(titulo, texto, critico=False):
+    subprocess.run(["notify-send", "-a", "Nyxz", "-i", "drive-harddisk", "-u", "critical" if critico else "normal",
+                    titulo, texto], check=False)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a == ["verificar"]:
+        root("verificar")
+    elif len(a) == 3 and a[0] == "teste":
+        root("teste", a[1], a[2])
+    elif a[0] == "velocidade" and len(a) <= 2:
+        velocidade(a[1] if len(a) == 2 else str(Path.home()))
+    elif a == ["alertar"]:
+        alertar()
+    else:
+        sys.exit("uso: discos estado|verificar|teste curto|longo <disco>|velocidade [pasta]|alertar")
+
+
+if __name__ == "__main__":
+    main()

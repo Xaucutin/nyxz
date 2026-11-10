@@ -1,0 +1,10 @@
+[Unit]
+Description=Nyxz: saúde dos discos a cada 30 minutos e no boot
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

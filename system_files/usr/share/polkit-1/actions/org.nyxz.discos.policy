@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Ler a saúde dos discos e pedir o teste SMART do próprio disco: sem senha para quem
+     está sentado no PC. O programa só aceita esses comandos. -->
+<policyconfig>
+  <vendor>Nyxz</vendor>
+  <action id="org.nyxz.discos">
+    <description>Read disk health and run the disk self-test</description>
+    <description xml:lang="pt_BR">Ler a saúde dos discos e rodar o teste do próprio disco</description>
+    <message>Authentication is required to read disk health</message>
+    <message xml:lang="pt_BR">É preciso autenticar para ler a saúde dos discos</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/nyxz/nyxz-discos-root</annotate>
+  </action>
+</policyconfig>

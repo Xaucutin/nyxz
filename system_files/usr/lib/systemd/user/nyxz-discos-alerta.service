@@ -1,0 +1,6 @@
+[Unit]
+Description=Nyxz: avisos de saúde dos discos
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nyxz/discos alertar

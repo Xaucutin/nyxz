@@ -1,0 +1,216 @@
+#!/usr/bin/python3 -I
+"""Saúde dos discos da Nyxz (parte que precisa de administrador: ler o SMART).
+
+  nyxz-discos-root verificar            lê todos os discos, grava /var/lib/nyxz/discos.json
+                                        e uma linha por disco por dia no histórico
+                                        (timer a cada 30 min e no boot; também pela página)
+  nyxz-discos-root teste curto|longo <disco>   pede ao disco o teste SMART dele
+
+Pela página Discos roda com pkexec, sem senha na sessão ativa (ação org.nyxz.discos):
+só aceita estes comandos e discos que existem em /dev.
+"""
+import datetime
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+PASTA = Path("/var/lib/nyxz")
+ESTADO = PASTA / "discos.json"
+HISTORICO = PASTA / "discos-historico.jsonl"
+DISCO = re.compile(r"^/dev/(nvme\d+n\d+|sd[a-z]+|vd[a-z]+|hd[a-z]+)$")
+
+
+def smart(dev):
+    r = subprocess.run(["smartctl", "-a", "-j", dev], capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        return {}
+
+
+def lsblk():
+    r = subprocess.run(["lsblk", "-J", "-b", "-o", "NAME,PATH,TYPE,SIZE,FSTYPE,MOUNTPOINTS,LABEL,TRAN,ROTA,MODEL"],
+                       capture_output=True, text=True)
+    try:
+        return [d for d in json.loads(r.stdout)["blockdevices"] if d.get("type") == "disk"]
+    except (ValueError, KeyError):
+        return []
+
+
+def link_nvme(nome):
+    """Velocidade do link PCIe do NVMe (ex.: "8.0 GT/s PCIe" x4 → "PCIe 3.0 x4")."""
+    controlador = re.sub(r"n\d+$", "", nome)          # nvme0n1 → nvme0
+    base = Path(f"/sys/class/nvme/{controlador}/device")
+    try:
+        vel = (base / "current_link_speed").read_text().strip()
+        largura = (base / "current_link_width").read_text().strip()
+    except OSError:
+        return ""
+    geracao = {"2.5": "1.0", "5.0": "2.0", "8.0": "3.0", "16.0": "4.0", "32.0": "5.0", "64.0": "6.0"}
+    m = re.match(r"([\d.]+) GT/s", vel)
+    return f"PCIe {geracao.get(m.group(1), m.group(1))} x{largura}" if m else vel
+
+
+def avaliar(s, nvme):
+    """Estado geral como no CrystalDiskInfo: bom, atencao, ruim (com os motivos)."""
+    motivos, estado = [], "bom"
+
+    def piora(novo, motivo):
+        nonlocal estado
+        ordem = {"bom": 0, "atencao": 1, "ruim": 2}
+        if ordem[novo] > ordem[estado]:
+            estado = novo
+        motivos.append(motivo)
+
+    if not s.get("smart_status") and not nvme:
+        return "desconhecido", ["Este disco não informa a saúde (SMART). Em máquinas virtuais isso é normal."]
+    if s.get("smart_status", {}).get("passed") is False:
+        piora("ruim", "O próprio disco diz que está falhando (SMART reprovado).")
+    temp = (s.get("temperature") or {}).get("current")
+    if nvme:
+        log = s.get("nvme_smart_health_information_log", {})
+        if log.get("critical_warning"):
+            piora("ruim", "O SSD acendeu um alerta crítico.")
+        if log.get("available_spare_threshold") is not None and log.get("available_spare", 100) < log.get("available_spare_threshold", 0):
+            piora("ruim", "A reserva de blocos de troca acabou.")
+        uso = log.get("percentage_used", 0)
+        if uso >= 100:
+            piora("ruim", f"Vida útil prevista já passou ({uso}% usada).")
+        elif uso >= 90:
+            piora("atencao", f"Vida útil quase no fim ({uso}% usada).")
+        if log.get("media_errors"):
+            piora("atencao", f"{log['media_errors']} erro(s) de mídia registrados.")
+        if temp and temp >= 70:
+            piora("atencao", f"Temperatura alta: {temp} °C.")
+    else:
+        attrs = {a["id"]: a for a in (s.get("ata_smart_attributes") or {}).get("table", [])}
+
+        def bruto(i):
+            return ((attrs.get(i) or {}).get("raw") or {}).get("value", 0)
+        if bruto(5):
+            piora("atencao", f"{bruto(5)} setor(es) realocado(s): o disco já trocou partes com defeito.")
+        if bruto(197):
+            piora("atencao", f"{bruto(197)} setor(es) esperando realocação.")
+        if bruto(198):
+            piora("ruim", f"{bruto(198)} setor(es) que não dá mais para ler.")
+        if bruto(199):
+            piora("atencao", f"{bruto(199)} erro(s) de comunicação: pode ser o cabo SATA.")
+        for a in attrs.values():
+            if a.get("thresh") and a.get("value") is not None and a["value"] <= a["thresh"]:
+                piora("ruim", f"Atributo \"{a.get('name')}\" abaixo do limite do fabricante.")
+        if temp and temp >= 55:
+            piora("atencao", f"Temperatura alta: {temp} °C.")
+    if estado == "bom":
+        motivos.append("Nenhum problema encontrado.")
+    return estado, motivos
+
+
+def ficha(d):
+    dev = d["path"]
+    s = smart(dev)
+    nvme = dev.startswith("/dev/nvme")
+    estado, motivos = avaliar(s, nvme)
+    log = s.get("nvme_smart_health_information_log", {})
+    f = {
+        "disco": dev, "nome": d["name"], "modelo": s.get("model_name") or d.get("model") or "Disco",
+        "serie": s.get("serial_number", ""), "firmware": s.get("firmware_version", ""),
+        "capacidade": d.get("size", 0), "tipo": "NVMe" if nvme else ("HD" if d.get("rota") else "SSD SATA"),
+        "interface": link_nvme(d["name"]) if nvme else ((s.get("interface_speed") or {}).get("current") or {}).get("string", d.get("tran") or ""),
+        "estado": estado, "motivos": motivos,
+        "temperatura": (s.get("temperature") or {}).get("current"),
+        "horas": (s.get("power_on_time") or {}).get("hours", log.get("power_on_hours")),
+        "ligacoes": s.get("power_cycle_count", log.get("power_cycles")),
+        "atributos": [],
+        "autoteste": None,
+        "particoes": [{"nome": c["name"], "tamanho": c.get("size", 0), "sistema": c.get("fstype") or "",
+                       "montado": [m for m in (c.get("mountpoints") or []) if m], "rotulo": c.get("label") or ""}
+                      for c in d.get("children", [])],
+    }
+    if nvme:
+        f.update({
+            "vida_usada": log.get("percentage_used"), "reserva": log.get("available_spare"),
+            "lido_bytes": log.get("data_units_read", 0) * 512000, "escrito_bytes": log.get("data_units_written", 0) * 512000,
+            "desligamentos_inesperados": log.get("unsafe_shutdowns"), "erros_midia": log.get("media_errors"),
+            "erros_integridade": log.get("num_err_log_entries"),
+        })
+        testes = (s.get("nvme_self_test_log") or {}).get("table") or []
+        if testes:
+            t = testes[0]
+            f["autoteste"] = {"resultado": (t.get("self_test_result") or {}).get("string", ""),
+                              "horas": t.get("power_on_hours")}
+        andamento = (s.get("nvme_self_test_log") or {}).get("current_self_test_completion_percent")
+        if andamento is not None:
+            f["autoteste_andamento"] = andamento
+    else:
+        for a in (s.get("ata_smart_attributes") or {}).get("table", []):
+            f["atributos"].append({"id": a["id"], "nome": a.get("name", ""), "valor": a.get("value"),
+                                   "pior": a.get("worst"), "limite": a.get("thresh"),
+                                   "bruto": (a.get("raw") or {}).get("string", "")})
+        lbas = next((a["raw"]["value"] for a in (s.get("ata_smart_attributes") or {}).get("table", []) if a["id"] == 241), None)
+        if lbas:
+            f["escrito_bytes"] = lbas * (s.get("logical_block_size") or 512)
+        testes = ((s.get("ata_smart_self_test_log") or {}).get("standard") or {}).get("table") or []
+        if testes:
+            t = testes[0]
+            f["autoteste"] = {"resultado": (t.get("status") or {}).get("string", ""), "horas": t.get("lifetime_hours")}
+        andamento = ((s.get("ata_smart_data") or {}).get("self_test") or {}).get("status", {})
+        if andamento.get("remaining_percent"):
+            f["autoteste_andamento"] = 100 - andamento["remaining_percent"]
+    return f
+
+
+def gravar(caminho, texto, modo="w"):
+    PASTA.mkdir(parents=True, exist_ok=True)
+    with open(caminho, modo, encoding="utf-8") as a:
+        a.write(texto)
+    os.chmod(caminho, 0o644)
+
+
+def verificar():
+    discos = [ficha(d) for d in lsblk() if not d["name"].startswith(("zram", "loop", "sr"))]
+    agora = datetime.datetime.now()
+    gravar(ESTADO.with_suffix(".tmp"), json.dumps({"quando": agora.isoformat(timespec="seconds"), "discos": discos},
+                                                  ensure_ascii=False))
+    os.replace(ESTADO.with_suffix(".tmp"), ESTADO)
+    # Histórico: uma linha por disco por dia (a última leitura do dia vale)
+    hoje = agora.date().isoformat()
+    registros = []
+    try:
+        for linha in HISTORICO.read_text().splitlines():
+            try:
+                registros.append(json.loads(linha))
+            except ValueError:
+                pass
+    except OSError:
+        pass
+    for d in discos:
+        serie = d["serie"] or d["disco"]
+        antes = next((r for r in registros if r.get("dia") == hoje and r.get("serie") == serie), {})
+        registros = [r for r in registros if not (r.get("dia") == hoje and r.get("serie") == serie)]
+        temps = [t for t in (d.get("temperatura"), antes.get("temperatura_max")) if t is not None]
+        registros.append({"dia": hoje, "serie": serie, "escrito": d.get("escrito_bytes"),
+                          "temperatura": d.get("temperatura"), "vida_usada": d.get("vida_usada"),
+                          # maior temperatura do dia (o timer lê a cada 30 min)
+                          "temperatura_max": max(temps) if temps else None})
+    gravar(HISTORICO, "\n".join(json.dumps(r) for r in registros[-5000:]) + "\n")
+
+
+def main():
+    a = sys.argv[1:]
+    if a == ["verificar"]:
+        verificar()
+    elif len(a) == 3 and a[0] == "teste" and a[1] in ("curto", "longo") and DISCO.match(a[2]) and os.path.exists(a[2]):
+        tipo = {"curto": "short", "longo": "long"}[a[1]]
+        r = subprocess.run(["smartctl", "-t", tipo, a[2]], capture_output=True, text=True)
+        if r.returncode & 0b11:
+            sys.exit("O disco não aceitou o teste.")
+        verificar()
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

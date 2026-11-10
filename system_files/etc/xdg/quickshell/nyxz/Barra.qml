@@ -296,6 +296,13 @@ PanelWindow {
                 }
             }
 
+            // ---------------------------------------------- medidor (Ajustes; desligado por padrão)
+            Loader {
+                active: Ajustes.medidor
+                visible: active
+                sourceComponent: Medidor { emCima: Ajustes.barraEmCima }
+            }
+
             // ---------------------------------------------- bandeja (fixar/ocultar como no Windows)
             Bandeja {
                 janelaBarra: barra

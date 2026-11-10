@@ -67,3 +67,7 @@ bluez
 NetworkManager-openvpn
 wireguard-tools
 nftables
+# Saúde dos discos (Configurações → Discos): SMART, NVMe e teste de velocidade
+smartmontools
+nvme-cli
+fio

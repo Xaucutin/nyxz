@@ -1,0 +1,8 @@
+[Unit]
+Description=Nyxz: avisa quando a saúde de um disco piora
+
+[Path]
+PathChanged=/var/lib/nyxz/discos.json
+
+[Install]
+WantedBy=default.target

@@ -188,14 +188,16 @@ systemctl enable greetd.service
 # baixa em segundo plano e aplica no próximo boot que o usuário fizer.
 systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
-systemctl enable nyxz-atualizar.timer nyxz-migracoes.service nyxz-rede.service
+systemctl enable nyxz-atualizar.timer nyxz-migracoes.service nyxz-rede.service nyxz-discos.timer
+# Saúde dos discos: o timer da Nyxz confere a cada 30 min; o smartd ficaria rodando sempre
+systemctl disable smartd.service 2>/dev/null || true
 # Bluetooth: só acorda quando há adaptador (bluetooth.target)
 systemctl enable bluetooth.service 2>/dev/null || true
 # Servidor SSH desligado por padrão: num computador pessoal, a porta 22 aberta na rede
 # é risco à toa. Liga pelo Dev Hub → SSH quando precisar.
 systemctl disable sshd.service sshd.socket 2>/dev/null || true
 # Serviços de usuário da Nyxz: ligados para todos os usuários, sobem com a sessão gráfica.
-systemctl --global enable nyxz-scoped.service
+systemctl --global enable nyxz-scoped.service nyxz-discos-alerta.path
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
 # vêm pela imagem nova, não por dnf.
 sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/_copr_*.repo 2>/dev/null || true

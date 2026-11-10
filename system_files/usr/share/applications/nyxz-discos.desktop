@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Discos
+GenericName=Saúde dos discos
+Comment=Saúde, temperatura e vida útil dos SSDs e HDs, testes do disco e de velocidade
+Exec=/usr/libexec/nyxz/configuracoes discos
+Icon=drive-harddisk
+Categories=System;Settings;
+Keywords=disco;ssd;hd;nvme;smart;saude;crystaldiskinfo;crystaldiskmark;velocidade;temperatura;vida util;tbw;

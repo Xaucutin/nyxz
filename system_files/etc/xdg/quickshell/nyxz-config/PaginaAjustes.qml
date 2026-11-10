@@ -29,6 +29,7 @@ Pagina {
             property bool privacidade: true
             property bool barraEmCima: false
             property bool iconesCrescem: false
+            property bool medidor: false
             property string cantoNotificacoes: "superior-direito"
             property int bordaJanela: 1
             property string teclaArrastar: "SUPER"
@@ -63,6 +64,7 @@ Pagina {
         { grupo: "Barra", nome: "Indicador de privacidade", texto: "Ponto vermelho quando um app usa microfone, câmera ou captura a tela.", chave: "privacidade" },
         { grupo: "Barra", nome: "Barra em cima", texto: "Coloca a barra no topo da tela.", chave: "barraEmCima" },
         { grupo: "Barra", nome: "Ícones crescem sob o mouse", texto: "Aumento leve do ícone do app, estilo dock.", chave: "iconesCrescem" },
+        { grupo: "Barra", nome: "Medidor na barra", texto: "CPU, RAM, placa de vídeo e temperatura. Passe o mouse para ver os detalhes (RAM do sistema e dos apps).", chave: "medidor" },
         { grupo: "Janelas", nome: "Títulos sem o nome do app", texto: "Tira \" — Brave\", \" - Visual Studio Code\" e parecidos do fim dos títulos.", chave: "titulosLimpos" },
         { grupo: "Janelas", nome: "Borda das janelas", texto: "Espessura da borda em volta das janelas.", chave: "bordaJanela",
           opcoes: [{ v: 0, n: "Sem borda" }, { v: 1, n: "Fina" }, { v: 2, n: "Média" }] },
