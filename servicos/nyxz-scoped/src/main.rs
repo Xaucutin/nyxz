@@ -224,7 +224,10 @@ fn cgroup_da_unidade(unidade: &str) -> Option<PathBuf> {
     let caminho = proprio.lines().find_map(|l| l.strip_prefix("0::"))?;
     let fim = caminho.find(".service/").map(|i| i + ".service".len())?;
     let base = PathBuf::from(format!("/sys/fs/cgroup{}", &caminho[..fim]));
-    for fatia in ["app.slice", "app.slice/app-graphical.slice", "app-graphical.slice", "session.slice"] {
+    // nyxz.slice/…: apps com regra de rede (nyxz-netd). Um jogo aberto pela Steam que está
+    // "fora da VPN" continua fora da VPN, porque o escopo novo do jogo fica na mesma fatia.
+    for fatia in ["app.slice", "app.slice/app-graphical.slice", "app-graphical.slice", "session.slice",
+                  "nyxz.slice/nyxz-semnet.slice", "nyxz.slice/nyxz-direto.slice"] {
         let p = base.join(fatia).join(unidade);
         if p.is_dir() {
             return Some(p);

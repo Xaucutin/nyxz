@@ -1,0 +1,21 @@
+[Unit]
+Description=Nyxz: internet por app (sem internet / fora da VPN)
+After=network-pre.target nyxz-rede.service
+Wants=network-pre.target
+
+[Service]
+ExecStart=/usr/libexec/nyxz/nyxz-netd
+ExecStopPost=/usr/libexec/nyxz/nyxz-netd limpar
+Restart=on-failure
+RestartSec=2
+# Só precisa de rede e cgroups: o resto do sistema fica fora de alcance
+ProtectHome=yes
+ProtectSystem=strict
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

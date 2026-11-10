@@ -33,7 +33,35 @@ Pagina {
 
     function atualizar() { cmdEstado.rodar([cmd, "estado"]); }
     function avisar(texto, erro) { aviso = texto; avisoErro = !!erro; limpaAviso.restart(); }
-    Component.onCompleted: { atualizar(); cmdIp.rodar([cmd, "ip"]); }
+    Component.onCompleted: { atualizar(); cmdIp.rodar([cmd, "ip"]); cmdApps.rodar([cmd, "apps"]); }
+
+    // Internet por app: { "id-do-app": "semnet" | "direto" }
+    property var regras: ({})
+    property string buscaApp: ""
+    readonly property var modos: [
+        { id: "normal", nome: "Normal" }, { id: "direto", nome: "Fora da VPN" }, { id: "semnet", nome: "Sem internet" }
+    ]
+    Comando {
+        id: cmdApps
+        onPronto: s => { try { p.regras = JSON.parse(s).apps; } catch (e) {} }
+    }
+    function definirApp(app, modo) {
+        const r = Object.assign({}, p.regras);
+        if (modo === "normal") delete r[app]; else r[app] = modo;
+        p.regras = r;
+        acao.rodar([cmd, "apps", "definir", app, modo], "Vale na próxima vez que o app abrir (feche e abra de novo se ele estiver aberto).");
+    }
+    function nomeApp(id) {
+        const e = DesktopEntries.byId(id);
+        return e ? e.name : id;
+    }
+    readonly property var candidatos: {
+        const b = buscaApp.trim().toLowerCase();
+        if (!b) return [];
+        return DesktopEntries.applications.values
+            .filter(e => !e.noDisplay && !(e.id in p.regras) && (e.name.toLowerCase().indexOf(b) >= 0 || e.id.toLowerCase().indexOf(b) >= 0))
+            .slice(0, 6);
+    }
     // A VPN pode cair ou ser ligada pelo painel rápido: confere a cada 4 s
     Timer { interval: 4000; running: true; repeat: true; onTriggered: p.atualizar() }
     Timer { id: limpaAviso; interval: 6000; onTriggered: p.aviso = "" }
@@ -262,6 +290,81 @@ Pagina {
                     acao.rodar([p.cmd, "dns", modelData.id], "DNS trocado para " + modelData.nome + ".");
                 }
             }
+        }
+    }
+
+    // ---------------------------------------------- internet por app
+    Text {
+        Layout.topMargin: 18
+        text: "Internet por app"
+        font.family: Tema.fonte; font.pixelSize: 12; font.weight: Font.Medium; color: Tema.texto3
+    }
+    Text {
+        Layout.fillWidth: true
+        wrapMode: Text.Wrap
+        text: "\"Fora da VPN\": o app sai direto pela sua conexão mesmo com a VPN ligada (ex.: jogos, para não aumentar o ping). \"Sem internet\": o app não acessa a internet, mas a rede de casa e a LAN virtual continuam. Vale para apps abertos pela Nyxz."
+        font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto2
+    }
+    Repeater {
+        model: Object.keys(p.regras)
+        delegate: RowLayout {
+            id: linhaApp
+            required property string modelData
+            Layout.fillWidth: true
+            spacing: 6
+            Text {
+                Layout.fillWidth: true
+                text: p.nomeApp(linhaApp.modelData)
+                elide: Text.ElideRight
+                font.family: Tema.fonte; font.pixelSize: 13; color: Tema.texto
+            }
+            Repeater {
+                model: p.modos
+                delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool ativo: (p.regras[linhaApp.modelData] || "normal") === modelData.id
+                    implicitWidth: rotuloModo.implicitWidth + 20
+                    implicitHeight: 26
+                    radius: 13
+                    color: ativo ? Tema.selecionado : areaModo.containsMouse ? Tema.hover : "transparent"
+                    border.width: 1
+                    border.color: ativo ? Tema.bordaPainel : Tema.borda
+                    Text {
+                        id: rotuloModo
+                        anchors.centerIn: parent
+                        text: parent.modelData.nome
+                        font.family: Tema.fonte; font.pixelSize: 12
+                        color: parent.ativo ? Tema.texto : Tema.texto2
+                    }
+                    MouseArea {
+                        id: areaModo
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: if (!parent.ativo) p.definirApp(linhaApp.modelData, parent.modelData.id)
+                    }
+                }
+            }
+        }
+    }
+    Campo {
+        Layout.fillWidth: true
+        rotulo: "Adicionar um app (procure pelo nome)"
+        onTextChanged: p.buscaApp = text
+    }
+    Repeater {
+        model: p.candidatos
+        delegate: RowLayout {
+            required property var modelData
+            Layout.fillWidth: true
+            spacing: 8
+            Text {
+                Layout.fillWidth: true
+                text: modelData.name
+                elide: Text.ElideRight
+                font.family: Tema.fonte; font.pixelSize: 13; color: Tema.texto2
+            }
+            Botao { texto: "Fora da VPN"; onClicado: p.definirApp(modelData.id, "direto") }
+            Botao { texto: "Sem internet"; onClicado: p.definirApp(modelData.id, "semnet") }
         }
     }
 }

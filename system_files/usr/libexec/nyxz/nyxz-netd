@@ -1,0 +1,164 @@
+#!/usr/bin/python3 -I
+"""nyxz-netd (primeira versão): internet por app.
+
+Cada usuário tem duas fatias do systemd para apps com regra de rede (o "nyx run" abre o
+app dentro delas):
+  nyxz.slice/nyxz-semnet.slice   sem internet (a rede de casa e a LAN virtual continuam)
+  nyxz.slice/nyxz-direto.slice   fora da VPN (sai direto pela conexão normal)
+
+Este serviço (root) olha a cada 2 s quais fatias existem e mantém UMA tabela própria do
+nftables ("inet nyxz_apps") com uma regra por fatia, mais a rota direta usada pela fatia
+"fora da VPN" (marca 0x7700 → tabela 7700 com a rota padrão da conexão física, e NAT de
+origem). Nunca mexe nas tabelas dos outros (kill switch, firewalld, Podman, ZeroTier).
+
+Por que olhar as fatias: a regra "socket cgroupv2" do nftables só aceita o caminho de
+um cgroup que já existe (ARQUITETURA.md, 2.3). As fatias são fixas, então a regra vale
+para todos os apps dentro delas, inclusive os que abrirem depois.
+
+Liga sozinho quando alguém configura uma regra por app e fica desligado (0 MB) sem regras.
+"""
+import glob
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+TABELA = "nyxz_apps"
+MARCA = "0x7700"
+TABELA_ROTA = "7700"
+PRIORIDADE_REGRA = "90"
+LOCAIS4 = "10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10, 224.0.0.0/4, 255.255.255.255"
+LOCAIS6 = "fe80::/10, fc00::/7, ff00::/8, ::1"
+VPN = ("wg", "tun", "tap", "proton", "nyxz", "zt", "tailscale")
+FATIAS = "/sys/fs/cgroup/user.slice/user-*.slice/user@*.service/nyxz.slice/nyxz-{}.slice"
+
+
+def log(*a):
+    print("nyxz-netd:", *a, flush=True)
+
+
+def rodar(*args, entrada=None):
+    return subprocess.run(args, input=entrada, text=True, capture_output=True)
+
+
+def fatias(tipo):
+    """Caminhos das fatias relativos à raiz do cgroup (como o nftables espera)."""
+    return sorted(p[len("/sys/fs/cgroup/"):] for p in glob.glob(FATIAS.format(tipo)))
+
+
+def rota_fisica():
+    """Rota padrão que NÃO é de VPN (a conexão de verdade: cabo ou Wi-Fi)."""
+    r = rodar("ip", "-j", "route", "show", "default", "table", "main")
+    try:
+        rotas = json.loads(r.stdout or "[]")
+    except ValueError:
+        return None
+    rotas = [x for x in rotas if not x.get("dev", "").startswith(VPN)]
+    rotas.sort(key=lambda x: x.get("metric", 0))
+    return rotas[0] if rotas else None
+
+
+def regras(semnet, direto):
+    linhas = [f"table inet {TABELA} {{"]
+    # Marca antes da escolha da rota ("route" refaz a rota com a marca nova)
+    linhas += ["  chain rota {", "    type route hook output priority mangle; policy accept;"]
+    for c in direto:
+        linhas.append(f'    socket cgroupv2 level 5 "{c}" meta mark set {MARCA}')
+    linhas += ["  }"]
+    # Bloqueio antes de tudo (antes do kill switch, que fica em "filter")
+    linhas += ["  chain filtro {", "    type filter hook output priority filter - 10; policy accept;"]
+    for c in semnet:
+        linhas += [
+            f'    socket cgroupv2 level 5 "{c}" oifname "lo" accept',
+            f'    socket cgroupv2 level 5 "{c}" ip daddr {{ {LOCAIS4} }} accept',
+            f'    socket cgroupv2 level 5 "{c}" ip6 daddr {{ {LOCAIS6} }} accept',
+            f'    socket cgroupv2 level 5 "{c}" oifname "zt*" accept',
+            f'    socket cgroupv2 level 5 "{c}" reject with icmpx admin-prohibited',
+        ]
+    linhas += ["  }"]
+    # Quem sai direto precisa do endereço da conexão física (não o da VPN)
+    linhas += ["  chain nat {", "    type nat hook postrouting priority srcnat; policy accept;",
+               f'    meta mark {MARCA} oifname != {{ "wg*", "tun*", "tap*", "lo" }} masquerade',
+               "  }", "}"]
+    return "\n".join(linhas) + "\n"
+
+
+def aplicar_nft(texto):
+    r = rodar("nft", "-f", "-", entrada=f"table inet {TABELA}\ndelete table inet {TABELA}\n" + texto)
+    if r.returncode != 0:
+        log("nftables recusou:", r.stderr.strip())
+        return False
+    return True
+
+
+def aplicar_rota(rota):
+    # Tabela 7700: a rota padrão física + as rotas da rede local dessa interface
+    rodar("ip", "route", "flush", "table", TABELA_ROTA)
+    if rota:
+        dev = rota["dev"]
+        if rota.get("gateway"):
+            rodar("ip", "route", "replace", "default", "via", rota["gateway"], "dev", dev, "table", TABELA_ROTA)
+        else:
+            rodar("ip", "route", "replace", "default", "dev", dev, "table", TABELA_ROTA)
+        r = rodar("ip", "-j", "route", "show", "table", "main", "dev", dev, "scope", "link")
+        try:
+            for x in json.loads(r.stdout or "[]"):
+                rodar("ip", "route", "replace", x["dst"], "dev", dev, "table", TABELA_ROTA)
+        except (ValueError, KeyError):
+            pass
+    tem = TABELA_ROTA in rodar("ip", "rule", "show", "priority", PRIORIDADE_REGRA).stdout
+    if not tem:
+        rodar("ip", "rule", "add", "fwmark", MARCA, "lookup", TABELA_ROTA, "priority", PRIORIDADE_REGRA)
+
+
+def limpar():
+    rodar("nft", "delete", "table", "inet", TABELA)
+    rodar("ip", "rule", "del", "priority", PRIORIDADE_REGRA)
+    rodar("ip", "route", "flush", "table", TABELA_ROTA)
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "limpar":
+        limpar()
+        return
+    parar = False
+
+    def sair(*_):
+        nonlocal parar
+        parar = True
+    signal.signal(signal.SIGTERM, sair)
+    signal.signal(signal.SIGINT, sair)
+
+    anterior = None
+    log("pronto")
+    while not parar:
+        semnet, direto = fatias("semnet"), fatias("direto")
+        rota = rota_fisica() if direto else None
+        # O nftables guarda o cgroup pelo número dele (inode), não pelo nome: se a fatia
+        # for recriada (logout e login), as regras precisam ser refeitas.
+        inodes = []
+        for c in semnet + direto:
+            try:
+                inodes.append(os.stat("/sys/fs/cgroup/" + c).st_ino)
+            except OSError:
+                inodes.append(0)
+        assinatura = (tuple(semnet), tuple(direto), tuple(inodes), json.dumps(rota, sort_keys=True))
+        if assinatura != anterior:
+            if aplicar_nft(regras(semnet, direto)):
+                if direto:
+                    aplicar_rota(rota)
+                else:
+                    rodar("ip", "rule", "del", "priority", PRIORIDADE_REGRA)
+                    rodar("ip", "route", "flush", "table", TABELA_ROTA)
+                log(f"regras: {len(semnet)} sem internet, {len(direto)} fora da VPN, saída direta por "
+                    f"{rota['dev'] if rota else '-'}")
+                anterior = assinatura
+        time.sleep(2)
+    limpar()
+    log("desligado")
+
+
+if __name__ == "__main__":
+    main()

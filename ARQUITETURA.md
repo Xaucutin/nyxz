@@ -228,7 +228,7 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Função | Como | Risco |
 |---|---|---|
 | VPN, kill switch, DNS | NetworkManager (WireGuard/OpenVPN) + `nyxz-netd` + systemd-resolved | 🟡 |
-| VPN/proxy por app | `nyxz-netd` (cgroup → marca → tabela de rotas) + sing-box | 🔴 |
+| VPN/proxy por app | `nyxz-netd` v1 (Python): duas fatias fixas do systemd por usuário (sem internet, fora da VPN), uma regra `socket cgroupv2` por fatia, marca 0x7700 → tabela 7700 + NAT. Proxy por app (sing-box) ainda falta | 🟡 |
 | Nyxz Share | v1: WebRTC no navegador (estilo Screego) servido pelo próprio PC; v2: GStreamer `webrtcbin` + VA-API | 🟡 |
 | Voz pela LAN | `murmur` (servidor Mumble) sob demanda + cliente Mumble | 🟢 |
 | Monitor da internet | Timer com ping/jitter/perda + teste de velocidade; relatório PDF/CSV | 🟢 |

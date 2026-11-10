@@ -10,6 +10,7 @@
                                             virtual); ao ligar, entrega ao usuário a
                                             chave da API local (~/.zeroTierOneAuthToken)
   nyxz-net-root lan firewall                libera no firewall as interfaces zt* da LAN
+  nyxz-net-root netd ligar|desligar         liga ou desliga o nyxz-netd (internet por app)
 
 Chamado com pkexec, sem senha para quem está na sessão ativa (ação org.nyxz.rede):
 só aceita estas opções fixas, nunca texto livre. O estado fica em /etc/nyxz/rede.json.
@@ -131,6 +132,8 @@ def killswitch_ligar(e):
         "  chain saida {",
         "    type filter hook output priority filter; policy accept;",
         '    oifname "lo" accept',
+        # Apps "fora da VPN" (marcados pelo nyxz-netd) saem direto mesmo com o kill switch
+        "    meta mark 0x7700 accept",
         f"    oifname {{ {lista_if} }} accept",
         f"    ip daddr {{ {LOCAIS4} }} accept",
         f"    ip6 daddr {{ {LOCAIS6} }} accept",
@@ -242,6 +245,10 @@ def main():
         subprocess.run(["systemctl", "stop", "zerotier-one.service"], check=False)
     elif a == ["lan", "firewall"]:
         lan_firewall()
+    elif a == ["netd", "ligar"]:
+        subprocess.run(["systemctl", "enable", "--now", "nyxz-netd.service"], capture_output=True)
+    elif a == ["netd", "desligar"]:
+        subprocess.run(["systemctl", "disable", "--now", "nyxz-netd.service"], capture_output=True)
     elif a == ["estado"]:
         print(json.dumps({"killswitch": killswitch_ativo(), "dns": e.get("dns", "automatico")}))
     else:

@@ -1,0 +1,5 @@
+[Unit]
+Description=Nyxz: apps sem internet (rede de casa e LAN virtual continuam)
+
+[Install]
+WantedBy=default.target

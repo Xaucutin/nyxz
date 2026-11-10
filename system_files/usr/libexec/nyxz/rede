@@ -9,6 +9,9 @@
 #   rede killswitch ligar|desligar
 #   rede dns automatico|cloudflare|quad9|adguard|mullvad
 #   rede ip                          IP público e país (só quando pedido)
+#   rede apps                        JSON: regras de internet por app
+#   rede apps definir <app> normal|semnet|direto
+#                                    sem internet / fora da VPN (vale ao abrir o app de novo)
 #
 # A VPN é do NetworkManager (WireGuard no kernel: ~0 de RAM). O que precisa de
 # administrador passa pelo nyxz-net-root (pkexec, sem senha na sessão ativa).
@@ -149,6 +152,48 @@ def ip_publico():
         print(json.dumps({"ip": "", "pais": ""}))
 
 
+# ---------------------------------------------------------------- internet por app
+APPS = Path.home() / ".config/nyxz/rede-apps.json"
+
+
+def ler_apps():
+    try:
+        return json.loads(APPS.read_text(encoding="utf-8")).get("apps", {})
+    except (OSError, ValueError):
+        return {}
+
+
+def apps_estado():
+    netd = subprocess.run(["systemctl", "is-active", "--quiet", "nyxz-netd.service"]).returncode == 0
+    print(json.dumps({"apps": ler_apps(), "netd": netd}, ensure_ascii=False))
+
+
+def apps_definir(app, modo):
+    if not app or "/" in app or len(app) > 200:
+        sys.exit("App inválido.")
+    if modo not in ("normal", "semnet", "direto"):
+        sys.exit("Use normal, semnet ou direto.")
+    apps = ler_apps()
+    if modo == "normal":
+        apps.pop(app, None)
+    else:
+        apps[app] = modo
+    APPS.parent.mkdir(parents=True, exist_ok=True)
+    tmp = APPS.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"apps": apps}, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(APPS)
+    # As fatias ficam ligadas desde o login enquanto houver regra (o nftables só aceita
+    # fatias que já existem). Desligar não fecha nada: só deixam de ligar no próximo login.
+    for tipo in ("semnet", "direto"):
+        usa = tipo in apps.values()
+        unidade = f"nyxz-{tipo}.slice"
+        if usa:
+            subprocess.run(["systemctl", "--user", "enable", "--now", unidade], capture_output=True)
+        else:
+            subprocess.run(["systemctl", "--user", "disable", unidade], capture_output=True)
+    root("netd", "ligar" if apps else "desligar")
+
+
 def main():
     a = sys.argv[1:]
     if not a or a[0] == "estado":
@@ -169,6 +214,10 @@ def main():
         root("dns", a[1])
     elif a == ["ip"]:
         ip_publico()
+    elif a == ["apps"]:
+        apps_estado()
+    elif len(a) == 4 and a[:2] == ["apps", "definir"]:
+        apps_definir(a[2], a[3])
     else:
         sys.exit("uso: rede estado|vpn …|killswitch ligar|desligar|dns <perfil>|ip")
 

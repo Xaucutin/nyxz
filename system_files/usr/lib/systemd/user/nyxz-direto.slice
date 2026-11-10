@@ -1,0 +1,5 @@
+[Unit]
+Description=Nyxz: apps fora da VPN (saem direto pela conexão normal)
+
+[Install]
+WantedBy=default.target

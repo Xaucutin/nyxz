@@ -17,13 +17,25 @@ case "${1:-ajuda}" in
   run)
     shift
     [ $# -ge 1 ] || { uso; exit 1; }
+    # Internet por app (Configurações → VPN e DNS → Por app): o app abre na fatia
+    # "sem internet" ou "fora da VPN", onde o nyxz-netd aplica a regra.
+    fatia=app.slice
+    regras="$HOME/.config/nyxz/rede-apps.json"
+    if [ -f "$regras" ]; then
+      modo="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("apps", {}).get(sys.argv[2], ""))' \
+        "$regras" "$(basename "$1" .desktop)" 2>/dev/null)" || modo=""
+      case "$modo" in semnet|direto) fatia="nyxz-$modo.slice" ;; esac
+    fi
+    # Sem regra, cada lançador usa a fatia padrão dele (como antes)
+    opcao=()
+    [ "$fatia" != app.slice ] && opcao=(-s "$fatia")
     if command -v app2unit >/dev/null 2>&1; then
-      exec app2unit -- "$@"
+      exec app2unit "${opcao[@]}" -- "$@"
     elif command -v uwsm >/dev/null 2>&1; then
-      exec uwsm app -- "$@"
+      exec uwsm app "${opcao[@]}" -- "$@"
     else
       exec systemd-run --user --scope --quiet \
-        --unit="app-$(basename "$1")-$$" --slice=app.slice -- "$@"
+        --unit="app-$(basename "$1")-$$" --slice="$fatia" -- "$@"
     fi
     ;;
   dev)
