@@ -5,3 +5,4 @@ errornointernet/quickshell
 # Só o repositório (desligado): o Ghostty entra na imagem local quando escolhido.
 scottames/ghostty
 brycensranch/gpu-screen-recorder-git
+ilyaz/LACT

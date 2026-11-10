@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Jogos
+GenericName=Biblioteca de jogos
+Comment=Todos os seus jogos num lugar: Steam, Epic, GOG, Minecraft, Roblox, Bottles e avulsos
+Exec=/usr/libexec/nyxz/biblioteca
+Icon=applications-games
+Categories=Game;
+Keywords=jogo;jogos;biblioteca;game;games;library;steam;epic;gog;heroic;minecraft;prism;roblox;sober;bottles;jogar;

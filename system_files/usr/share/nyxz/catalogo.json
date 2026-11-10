@@ -24,7 +24,8 @@
   ],
   "repositorios": {
     "vscode": "nyxz-vscode.repo",
-    "ghostty": "_copr_scottames-ghostty.repo"
+    "ghostty": "_copr_scottames-ghostty.repo",
+    "lact": "_copr_ilyaz-LACT.repo"
   },
   "itens": [
     {
@@ -230,6 +231,24 @@
       ],
       "padrao": true,
       "tamanho_mb": 30
+    },
+    {
+      "id": "lact",
+      "categoria": "jogos",
+      "nome": "LACT (controle da placa de vídeo)",
+      "descricao": "Curva das ventoinhas, limite de energia, undervolt e perfis por jogo. Estilo MSI Afterburner.",
+      "tipo": "rpm",
+      "pacotes": [
+        "lact"
+      ],
+      "repos": [
+        "lact"
+      ],
+      "servicos": [
+        "lactd.service"
+      ],
+      "padrao": false,
+      "tamanho_mb": 40
     },
     {
       "id": "prism",

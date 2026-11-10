@@ -66,9 +66,16 @@ ROTAS = {
         (SHELL.parent / "nyxz-config", lambda r: r in ("Botao.qml", "Pagina.qml", "Linha.qml", "Comando.qml", "Interruptor.qml")),
         (SHELL.parent / "nyxz-dev", lambda r: True),
     ]),
+    # Biblioteca de jogos: os arquivos dela + tema, ícones e componentes
+    "/jogos.tgz": lambda: empacotar([
+        (SHELL, lambda r: r == "Tema.qml" or r.startswith("icones/")),
+        (SHELL.parent / "nyxz-config", lambda r: r in ("Botao.qml", "Comando.qml")),
+        (SHELL.parent / "nyxz-dev", lambda r: r == "Campo.qml"),
+        (SHELL.parent / "nyxz-jogos", lambda r: True),
+    ]),
     # Scripts e dados de /usr (nyx dev usr): vão para um /usr temporário (bootc usr-overlay)
     "/usr.tgz": lambda: empacotar([
-        (RAIZ / "system_files" / "usr", lambda r: r.startswith(("libexec/nyxz/", "share/nyxz/", "share/kio/", "bin/", "lib/systemd/user/"))),
+        (RAIZ / "system_files" / "usr", lambda r: r.startswith(("libexec/nyxz/", "share/nyxz/", "share/kio/", "share/applications/", "bin/", "lib/systemd/user/"))),
     ]),
 }
 

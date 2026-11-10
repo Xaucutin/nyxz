@@ -172,6 +172,13 @@ ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-dev/icones
 for f in Botao.qml Pagina.qml Linha.qml Comando.qml Interruptor.qml; do
   ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-dev/$f"
 done
+# A biblioteca de jogos usa o tema, os ícones e os componentes das Configurações e do Dev Hub.
+ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-jogos/Tema.qml
+ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-jogos/icones
+for f in Botao.qml Comando.qml; do
+  ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-jogos/$f"
+done
+ln -sf ../nyxz-dev/Campo.qml /etc/xdg/quickshell/nyxz-jogos/Campo.qml
 
 # ---------------------------------------------------------------- serviços
 log "Serviços"

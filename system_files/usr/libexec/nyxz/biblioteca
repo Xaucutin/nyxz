@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+# Abre a biblioteca de jogos da Nyxz. Se já estiver aberta, só atualiza a lista.
+if qs -c nyxz-jogos ipc show >/dev/null 2>&1; then
+  qs -c nyxz-jogos ipc call jogos atualizar >/dev/null 2>&1
+  exit 0
+fi
+if systemd-detect-virt --quiet 2>/dev/null; then
+  export QT_QUICK_BACKEND=software
+fi
+exec qs -c nyxz-jogos

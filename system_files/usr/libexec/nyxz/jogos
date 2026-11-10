@@ -1,0 +1,458 @@
+#!/usr/bin/python3 -I
+# Biblioteca de jogos da Nyxz: junta os jogos instalados de várias lojas num lugar só.
+#
+#   jogos listar                 JSON com todos os jogos
+#   jogos jogar <id>             abre o jogo (e liga o Modo jogo)
+#   jogos adicionar              jogo avulso; JSON pela entrada: {"nome", "comando", "capa"}
+#   jogos remover <id>           remove um jogo avulso
+#   jogos capa <id> [arquivo]    capa própria (sem arquivo: volta à capa da loja)
+#   jogos ocultar <id>           esconde da biblioteca (mostrar <id> volta)
+#
+# Lê só arquivos que as lojas já guardam no disco: Steam (VDF), Heroic (Epic e GOG),
+# Prism Launcher (Minecraft), Sober (Roblox) e Bottles. Nada fica rodando.
+import glob
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+CASA = Path.home()
+CONFIG = CASA / ".config/nyxz/jogos.json"
+HISTORICO = CASA / ".local/share/nyxz/jogos-historico.json"
+VAR = CASA / ".var/app"
+
+# Ferramentas que a Steam instala como "jogos" e não devem aparecer.
+FERRAMENTAS = ("proton", "steam linux runtime", "steamworks common", "steamvr")
+
+
+def ler_json(p, padrao):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except Exception:
+        return padrao
+
+
+def gravar_json(p, dados):
+    p = Path(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+# ------------------------------------------------------------------ VDF da Steam
+def vdf(texto):
+    """Lê o formato de texto da Valve ("chave" "valor" / "chave" { ... })."""
+    i, n = 0, len(texto)
+
+    def token():
+        nonlocal i
+        while i < n:
+            c = texto[i]
+            if c.isspace():
+                i += 1
+            elif texto.startswith("//", i):
+                while i < n and texto[i] != "\n":
+                    i += 1
+            else:
+                break
+        if i >= n:
+            return None
+        c = texto[i]
+        if c in "{}":
+            i += 1
+            return c
+        if c == '"':
+            i += 1
+            saida = []
+            while i < n and texto[i] != '"':
+                if texto[i] == "\\" and i + 1 < n:
+                    i += 1
+                    saida.append({"n": "\n", "t": "\t"}.get(texto[i], texto[i]))
+                else:
+                    saida.append(texto[i])
+                i += 1
+            i += 1
+            return ("s", "".join(saida))
+        inicio = i
+        while i < n and not texto[i].isspace() and texto[i] not in '{}"':
+            i += 1
+        return ("s", texto[inicio:i])
+
+    def bloco():
+        d = {}
+        while True:
+            t = token()
+            if t is None or t == "}":
+                return d
+            if t == "{":
+                continue
+            chave = t[1]
+            v = token()
+            if v == "{":
+                d[chave] = bloco()
+            elif v is None or v == "}":
+                return d
+            else:
+                d[chave] = v[1]
+
+    return bloco()
+
+
+def pegar(d, *chaves):
+    """Acesso sem diferenciar maiúsculas (a Steam mistura "Steam" e "steam")."""
+    for ch in chaves:
+        if not isinstance(d, dict):
+            return None
+        alvo = ch.lower()
+        d = next((v for k, v in d.items() if k.lower() == alvo), None)
+    return d
+
+
+def raizes_steam():
+    vistas, saida = set(), []
+    for r in (CASA / ".local/share/Steam", CASA / ".steam/steam",
+              VAR / "com.valvesoftware.Steam/.local/share/Steam"):
+        try:
+            real = r.resolve()
+        except OSError:
+            continue
+        if (real / "steamapps").is_dir() and real not in vistas:
+            vistas.add(real)
+            saida.append(real)
+    return saida
+
+
+def capa_steam(raiz, appid):
+    cache = raiz / "appcache/librarycache"
+    for p in (cache / f"{appid}_library_600x900.jpg", cache / str(appid) / "library_600x900.jpg"):
+        if p.is_file():
+            return str(p)
+    achados = glob.glob(str(cache / str(appid) / "**" / "library_600x900*.jpg"), recursive=True)
+    return achados[0] if achados else ""
+
+
+def jogos_steam():
+    jogos = []
+    for raiz in raizes_steam():
+        flatpak = str(raiz).startswith(str(VAR))
+        # Horas jogadas e última vez: ficam por conta (userdata/<id>/config/localconfig.vdf)
+        uso = {}
+        for cfg in glob.glob(str(raiz / "userdata/*/config/localconfig.vdf")):
+            try:
+                apps = pegar(vdf(Path(cfg).read_text(encoding="utf-8", errors="replace")),
+                             "UserLocalConfigStore", "Software", "Valve", "Steam", "apps") or {}
+            except Exception:
+                continue
+            for appid, info in apps.items():
+                if isinstance(info, dict):
+                    u = uso.setdefault(appid, {"minutos": 0, "ultima": 0})
+                    u["minutos"] += int(info.get("Playtime", 0) or 0)
+                    u["ultima"] = max(u["ultima"], int(info.get("LastPlayed", 0) or 0))
+        pastas = [raiz / "steamapps"]
+        lf = raiz / "steamapps/libraryfolders.vdf"
+        if lf.is_file():
+            try:
+                d = pegar(vdf(lf.read_text(encoding="utf-8", errors="replace")), "libraryfolders") or {}
+                for v in d.values():
+                    if isinstance(v, dict) and v.get("path"):
+                        pastas.append(Path(v["path"]) / "steamapps")
+            except Exception:
+                pass
+        vistos = set()
+        for pasta in pastas:
+            for acf in glob.glob(str(pasta / "appmanifest_*.acf")):
+                try:
+                    a = pegar(vdf(Path(acf).read_text(encoding="utf-8", errors="replace")), "AppState") or {}
+                except Exception:
+                    continue
+                appid, nome = a.get("appid", ""), a.get("name", "")
+                if not appid or appid in vistos or not nome:
+                    continue
+                if nome.lower().startswith(FERRAMENTAS) or appid == "228980":
+                    continue
+                # Bit 4 = instalado por completo (um download pela metade não aparece)
+                if not int(a.get("StateFlags", 0) or 0) & 4:
+                    continue
+                vistos.add(appid)
+                u = uso.get(appid, {})
+                jogos.append({
+                    "id": f"steam:{appid}", "nome": nome, "origem": "steam",
+                    "capa": capa_steam(raiz, appid),
+                    "minutos": u.get("minutos", 0),
+                    "ultima": u.get("ultima", 0) or int(a.get("LastPlayed", 0) or 0),
+                    "pasta": str(pasta / "common" / a.get("installdir", "")),
+                    "_cmd": (["flatpak", "run", "com.valvesoftware.Steam"] if flatpak else ["steam"])
+                            + [f"steam://rungameid/{appid}"],
+                    "_steam": True,
+                })
+    return jogos
+
+
+# ------------------------------------------------------------------ Heroic (Epic e GOG)
+def jogos_heroic():
+    jogos = []
+    for base, cmd in ((VAR / "com.heroicgameslauncher.hgl/config/heroic",
+                       ["flatpak", "run", "com.heroicgameslauncher.hgl", "--no-gui"]),
+                      (CASA / ".config/heroic", ["heroic", "--no-gui"])):
+        if not base.is_dir():
+            continue
+        tempos = ler_json(base / "store/timestamp.json", {})
+
+        def uso(app):
+            t = tempos.get(app, {}) if isinstance(tempos, dict) else {}
+            ultima = t.get("lastPlayed") or ""
+            try:
+                ultima = int(time.mktime(time.strptime(ultima[:19], "%Y-%m-%dT%H:%M:%S"))) if ultima else 0
+            except ValueError:
+                ultima = 0
+            return int(t.get("totalPlayed", 0) or 0), ultima
+
+        # Epic (pelo legendary)
+        leg = base / "legendaryConfig/legendary"
+        for app, info in ler_json(leg / "installed.json", {}).items():
+            if not isinstance(info, dict):
+                continue
+            capa = ""
+            meta = ler_json(leg / "metadata" / f"{app}.json", {})
+            for img in (meta.get("metadata", {}) or {}).get("keyImages", []) or []:
+                if img.get("type") == "DieselGameBoxTall":
+                    capa = img.get("url", "")
+            minutos, ultima = uso(app)
+            jogos.append({
+                "id": f"epic:{app}", "nome": info.get("title") or app, "origem": "epic",
+                "capa": capa, "minutos": minutos, "ultima": ultima,
+                "pasta": info.get("install_path", ""),
+                "_cmd": cmd + [f"heroic://launch?appName={app}&runner=legendary"],
+            })
+        # GOG
+        titulos = {}
+        for f in ("gog_store/library.json", "store_cache/gog_library.json"):
+            for g in ler_json(base / f, {}).get("games", []) or []:
+                if isinstance(g, dict) and g.get("app_name"):
+                    titulos[g["app_name"]] = g
+        for g in ler_json(base / "gog_store/installed.json", {}).get("installed", []) or []:
+            app = g.get("appName", "")
+            if not app:
+                continue
+            info = titulos.get(app, {})
+            minutos, ultima = uso(app)
+            jogos.append({
+                "id": f"gog:{app}", "origem": "gog",
+                "nome": info.get("title") or Path(g.get("install_path", app)).name,
+                "capa": info.get("art_square", ""), "minutos": minutos, "ultima": ultima,
+                "pasta": g.get("install_path", ""),
+                "_cmd": cmd + [f"heroic://launch?appName={app}&runner=gog"],
+            })
+    return jogos
+
+
+# ------------------------------------------------------------------ Prism (Minecraft)
+def jogos_prism():
+    jogos = []
+    pasta = VAR / "org.prismlauncher.PrismLauncher/data/PrismLauncher/instances"
+    for cfg in sorted(glob.glob(str(pasta / "*" / "instance.cfg"))):
+        valores = {}
+        for linha in Path(cfg).read_text(encoding="utf-8", errors="replace").splitlines():
+            if "=" in linha:
+                k, v = linha.split("=", 1)
+                valores[k.strip()] = v.strip()
+        inst = Path(cfg).parent.name
+        jogos.append({
+            "id": f"prism:{inst}", "nome": valores.get("name") or inst, "origem": "minecraft",
+            "capa": "", "pasta": str(Path(cfg).parent),
+            "minutos": int(valores.get("totalTimePlayed", "0") or 0) // 60,
+            "ultima": int(valores.get("lastLaunchTime", "0") or 0) // 1000,
+            "_cmd": ["flatpak", "run", "org.prismlauncher.PrismLauncher", "--launch", inst],
+        })
+    return jogos
+
+
+# ------------------------------------------------------------------ Sober (Roblox)
+def flatpak_instalado(app):
+    return any(Path(p).is_dir() for p in (CASA / ".local/share/flatpak/app" / app, Path("/var/lib/flatpak/app") / app))
+
+
+def jogos_sober():
+    if not flatpak_instalado("org.vinegarhq.Sober"):
+        return []
+    return [{"id": "sober", "nome": "Roblox", "origem": "roblox", "capa": "", "minutos": 0, "ultima": 0,
+             "pasta": "", "_cmd": ["flatpak", "run", "org.vinegarhq.Sober"]}]
+
+
+# ------------------------------------------------------------------ Bottles
+def programas_bottle(yml):
+    """Lê só a seção External_Programs do bottle.yml (sem depender de biblioteca YAML)."""
+    progs, dentro, atual = [], False, None
+    for linha in Path(yml).read_text(encoding="utf-8", errors="replace").splitlines():
+        if not linha.strip():
+            continue
+        recuo = len(linha) - len(linha.lstrip())
+        if recuo == 0:
+            dentro = linha.startswith("External_Programs:") and not linha.rstrip().endswith("{}")
+            continue
+        if not dentro:
+            continue
+        if recuo == 2:
+            atual = {}
+            progs.append(atual)
+        elif atual is not None and ":" in linha:
+            k, v = linha.strip().split(":", 1)
+            atual[k.strip()] = v.strip().strip("'\"")
+    return [p for p in progs if p.get("name")]
+
+
+def jogos_bottles():
+    jogos = []
+    pasta = VAR / "com.usebottles.bottles/data/bottles/bottles"
+    for yml in sorted(glob.glob(str(pasta / "*" / "bottle.yml"))):
+        bottle = Path(yml).parent.name
+        for p in programas_bottle(yml):
+            jogos.append({
+                "id": f"bottles:{bottle}:{p['name']}", "nome": p["name"], "origem": "bottles",
+                "capa": "", "minutos": 0, "ultima": 0, "pasta": p.get("folder", ""),
+                "_cmd": ["flatpak", "run", "--command=bottles-cli", "com.usebottles.bottles",
+                         "run", "-b", bottle, "-p", p["name"]],
+            })
+    return jogos
+
+
+# ------------------------------------------------------------------ avulsos e junção
+def jogos_avulsos(cfg):
+    return [{"id": a["id"], "nome": a["nome"], "origem": "avulso", "capa": a.get("capa", ""),
+             "minutos": 0, "ultima": 0, "pasta": "", "_cmd": ["sh", "-c", a["comando"]]}
+            for a in cfg.get("avulsos", []) if a.get("id") and a.get("comando")]
+
+
+def todos():
+    cfg = ler_json(CONFIG, {})
+    hist = ler_json(HISTORICO, {})
+    jogos = []
+    for fonte in (jogos_steam, jogos_heroic, jogos_prism, jogos_sober, jogos_bottles):
+        try:
+            jogos += fonte()
+        except Exception as e:  # uma loja com arquivo estranho não derruba as outras
+            print(f"aviso: {fonte.__name__}: {e}", file=sys.stderr)
+    jogos += jogos_avulsos(cfg)
+    capas = cfg.get("capas", {})
+    ocultos = set(cfg.get("ocultos", []))
+    for j in jogos:
+        h = hist.get(j["id"], {})
+        j["ultima"] = max(j["ultima"], int(h.get("ultima", 0)))
+        j["minutos"] = max(j["minutos"], int(h.get("segundos", 0)) // 60)
+        if capas.get(j["id"]):
+            j["capa"] = capas[j["id"]]
+        j["oculto"] = j["id"] in ocultos
+    return jogos
+
+
+def publico(j):
+    return {k: v for k, v in j.items() if not k.startswith("_")}
+
+
+def achar(jid):
+    for j in todos():
+        if j["id"] == jid:
+            return j
+    sys.exit(f"Jogo não encontrado: {jid}")
+
+
+def anotar(jid, segundos=0):
+    hist = ler_json(HISTORICO, {})
+    h = hist.setdefault(jid, {"ultima": 0, "segundos": 0})
+    h["ultima"] = int(time.time())
+    h["segundos"] = int(h.get("segundos", 0)) + int(segundos)
+    gravar_json(HISTORICO, hist)
+
+
+def avisar(titulo, texto):
+    subprocess.run(["notify-send", "-a", "Nyxz", "-i", "applications-games", titulo, texto], check=False)
+
+
+def jogar(jid):
+    j = achar(jid)
+    if shutil.which(j["_cmd"][0]) is None:
+        # Ex.: a pasta da Steam ficou, mas a Steam foi removida
+        loja = {"steam": "a Steam", "epic": "o Heroic", "gog": "o Heroic"}.get(j["origem"], j["_cmd"][0])
+        avisar(f"Não deu para abrir {j['nome']}", f"Instale {loja} em Configurações → Apps e componentes.")
+        sys.exit(1)
+    anotar(jid)
+    if j.get("_steam"):
+        # A Steam abre o jogo; o nyxz-scoped percebe e liga o Modo jogo sozinho.
+        subprocess.Popen(j["_cmd"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return
+    # Os outros rodam numa unidade própria: liga o Modo jogo, espera o jogo fechar,
+    # soma o tempo jogado e desliga o Modo jogo.
+    unidade = "nyxz-jogo-" + hashlib.sha1(jid.encode()).hexdigest()[:10]
+    subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={unidade}",
+                    "--description=Nyxz: " + j["nome"], "/usr/libexec/nyxz/jogos", "_sessao", jid], check=False)
+
+
+def sessao(jid):
+    j = achar(jid)
+    modo = "/usr/libexec/nyxz/modo-jogo"
+    subprocess.run([modo, "ligar"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    inicio = time.time()
+    try:
+        subprocess.run(j["_cmd"], check=False)
+    finally:
+        anotar(jid, time.time() - inicio)
+        subprocess.run([modo, "desligar"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "listar":
+        fontes = {
+            "steam": bool(raizes_steam()) or shutil.which("steam") is not None,
+            "heroic": flatpak_instalado("com.heroicgameslauncher.hgl"),
+            "prism": flatpak_instalado("org.prismlauncher.PrismLauncher"),
+            "sober": flatpak_instalado("org.vinegarhq.Sober"),
+            "bottles": flatpak_instalado("com.usebottles.bottles"),
+        }
+        print(json.dumps({"jogos": [publico(j) for j in todos()], "fontes": fontes}, ensure_ascii=False))
+    elif a[0] == "jogar" and len(a) == 2:
+        jogar(a[1])
+    elif a[0] == "_sessao" and len(a) == 2:
+        sessao(a[1])
+    elif a[0] == "adicionar":
+        d = json.loads(sys.stdin.read() or "{}")
+        nome, comando = (d.get("nome") or "").strip(), (d.get("comando") or "").strip()
+        if not nome or not comando:
+            sys.exit("Informe o nome e o comando do jogo.")
+        cfg = ler_json(CONFIG, {})
+        cfg.setdefault("avulsos", []).append({
+            "id": "avulso:" + hashlib.sha1(f"{nome}{time.time()}".encode()).hexdigest()[:8],
+            "nome": nome, "comando": comando, "capa": (d.get("capa") or "").strip()})
+        gravar_json(CONFIG, cfg)
+    elif a[0] == "remover" and len(a) == 2:
+        cfg = ler_json(CONFIG, {})
+        cfg["avulsos"] = [x for x in cfg.get("avulsos", []) if x.get("id") != a[1]]
+        gravar_json(CONFIG, cfg)
+    elif a[0] == "capa" and len(a) in (2, 3):
+        cfg = ler_json(CONFIG, {})
+        capas = cfg.setdefault("capas", {})
+        if len(a) == 3 and a[2]:
+            arq = os.path.expanduser(a[2])
+            if not os.path.isfile(arq):
+                sys.exit("Arquivo de imagem não encontrado.")
+            capas[a[1]] = arq
+        else:
+            capas.pop(a[1], None)
+        gravar_json(CONFIG, cfg)
+    elif a[0] in ("ocultar", "mostrar") and len(a) == 2:
+        cfg = ler_json(CONFIG, {})
+        oc = set(cfg.get("ocultos", []))
+        (oc.add if a[0] == "ocultar" else oc.discard)(a[1])
+        cfg["ocultos"] = sorted(oc)
+        gravar_json(CONFIG, cfg)
+    else:
+        sys.exit(__doc__ or "uso: jogos listar|jogar|adicionar|remover|capa|ocultar|mostrar")
+
+
+if __name__ == "__main__":
+    main()
