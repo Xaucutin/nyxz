@@ -28,6 +28,7 @@ ShellRoot {
         { id: "backup", nome: "Backup" },
         { id: "datahora", nome: "Data e hora" },
         { id: "atualizacoes", nome: "Atualizações" },
+        { id: "doctor", nome: "Nyxz Doctor" },
         { id: "sobre", nome: "Sobre" }
     ]
     property int atual: 0
@@ -157,7 +158,7 @@ ShellRoot {
                         source: {
                             const mapa = { rede: "PaginaRede.qml", vpn: "PaginaVpn.qml", lan: "PaginaLan.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
                                            teclado: "PaginaTeclado.qml", controles: "PaginaControles.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", componentes: "PaginaComponentes.qml", estatisticas: "PaginaEstatisticas.qml", discos: "PaginaDiscos.qml", voltar: "PaginaVoltar.qml", backup: "PaginaBackup.qml", datahora: "PaginaDataHora.qml",
-                                           atualizacoes: "PaginaAtualizacoes.qml", sobre: "PaginaSobre.qml" };
+                                           atualizacoes: "PaginaAtualizacoes.qml", doctor: "PaginaDoctor.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];
                         }
                         transform: Translate { y: ativa ? 0 : 10 }

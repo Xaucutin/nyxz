@@ -1,0 +1,16 @@
+[Unit]
+Description=Nyxz: liga à sessão o chaveiro destravado no login
+# O PAM do greetd destrava o chaveiro (gnome-keyring) com a senha do login, mas no
+# Hyprland ninguém liga esse chaveiro ao D-Bus da sessão (no GNOME quem faz isso é um
+# item de inicialização que só roda lá). Sem isto, o primeiro app que pede um segredo
+# abre outro chaveiro, travado, e aparece uma janela pedindo a senha de novo.
+ConditionPathExists=%t/keyring/control
+Before=graphical-session-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/gnome-keyring-daemon --start --components=secrets
+StandardOutput=null
+
+[Install]
+WantedBy=graphical-session-pre.target

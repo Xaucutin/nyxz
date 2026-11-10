@@ -44,6 +44,8 @@ fontconfig
 google-noto-sans-fonts
 google-noto-color-emoji-fonts
 python3
+# Nyxz Doctor: destravar o chaveiro pelo D-Bus (Gio)
+python3-gobject-base
 unzip
 # Linguagens pelo mise: os binários oficiais do Node.js precisam desta biblioteca
 libatomic

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Consertos do Nyxz Doctor: religar a rede, limpar o DNS e tentar de novo serviços
+     conhecidos. Sem senha para quem está sentado no PC; o programa só aceita isso. -->
+<policyconfig>
+  <vendor>Nyxz</vendor>
+  <action id="org.nyxz.doctor">
+    <description>Fix common problems found by Nyxz Doctor</description>
+    <description xml:lang="pt_BR">Consertar problemas comuns encontrados pelo Nyxz Doctor</description>
+    <message>Authentication is required to fix system problems</message>
+    <message xml:lang="pt_BR">É preciso autenticar para consertar o sistema</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/nyxz/nyxz-doctor-root</annotate>
+  </action>
+</policyconfig>

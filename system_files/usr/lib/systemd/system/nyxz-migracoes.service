@@ -1,5 +1,5 @@
 [Unit]
-Description=Nyxz: ajustes únicos em instalações antigas (idioma, fuso)
+Description=Nyxz: ajustes de instalação (idioma, fuso, idioma do login)
 DefaultDependencies=no
 After=local-fs.target
 Before=systemd-user-sessions.service greetd.service

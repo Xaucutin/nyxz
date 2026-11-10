@@ -1,0 +1,42 @@
+#!/usr/bin/python3 -I
+"""Consertos do Nyxz Doctor que precisam de administrador.
+
+  nyxz-doctor-root rede-reiniciar       religa o NetworkManager
+  nyxz-doctor-root dns-limpar           esvazia o cache de DNS (systemd-resolved)
+  nyxz-doctor-root reiniciar <serviço>  tenta de novo um serviço que falhou
+                                        (só os da Nyxz e alguns conhecidos)
+
+Roda pelo pkexec, sem senha na sessão ativa (ação org.nyxz.doctor).
+"""
+import re
+import subprocess
+import sys
+
+PERMITIDOS = re.compile(r"^(nyxz-[a-z0-9-]+|NetworkManager|bluetooth|systemd-resolved|zerotier-one|lactd"
+                        r"|power-profiles-daemon|nyxz-atualizar)\.service$")
+
+
+def systemctl(*args):
+    r = subprocess.run(["systemctl", *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(r.stderr.strip() or "Não deu certo.")
+
+
+def main():
+    a = sys.argv[1:]
+    if a == ["rede-reiniciar"]:
+        systemctl("restart", "NetworkManager.service")
+    elif a == ["dns-limpar"]:
+        subprocess.run(["resolvectl", "flush-caches"], check=False)
+        subprocess.run(["resolvectl", "reset-server-features"], check=False)
+    elif len(a) == 2 and a[0] == "reiniciar":
+        if not PERMITIDOS.match(a[1]):
+            sys.exit("Esse serviço não é reiniciado por aqui. Mande o relatório para quem for ajudar.")
+        subprocess.run(["systemctl", "reset-failed", a[1]], check=False)
+        systemctl("restart", a[1])
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

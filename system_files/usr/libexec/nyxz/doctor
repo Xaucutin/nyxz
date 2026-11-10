@@ -1,0 +1,588 @@
+#!/usr/bin/python3 -I
+# Nyxz Doctor (ideia 27): confere vídeo, som, rede, disco, atualizações, componentes,
+# memória, serviços e o chaveiro, explica em português simples e conserta com um clique
+# quando dá. Não fica rodando: só trabalha com a página aberta (RAM 0 até abrir).
+#
+#   doctor verificar             JSON: [{id, area, titulo, estado, texto, consertos}]
+#                                estado: ok | aviso | erro
+#                                conserto: {id, rotulo, arg?, senha?, pagina?, programa?}
+#   doctor consertar <id> [arg]  conserta (a senha do chaveiro vem pela entrada)
+#   doctor relatorio             grava um relatório SEM dados pessoais e mostra o caminho
+import concurrent.futures
+import datetime
+import getpass
+import json
+import os
+import pwd
+import re
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = "/usr/libexec/nyxz/nyxz-doctor-root"
+CASA = Path.home()
+RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+AREAS = ["Sistema", "Vídeo", "Som", "Rede", "Disco", "Atualizações", "Componentes", "Memória e serviços"]
+UNIDADE = re.compile(r"^[A-Za-z0-9@_.:\\-]+\.(service|socket|timer|mount|path)$")
+# Serviços do sistema que o Doctor sabe religar (o nyxz-doctor-root aceita só estes)
+RELIGAVEIS = re.compile(r"^(nyxz-[a-z0-9-]+|NetworkManager|bluetooth|systemd-resolved|zerotier-one|lactd"
+                        r"|power-profiles-daemon)\.service$")
+# Falhas conhecidas e inofensivas: no bootc a raiz é só leitura (composefs) e o
+# systemd-remount-fs sempre falha ao tentar remontá-la. Não quebra nada.
+IGNORAR = {"systemd-remount-fs.service"}
+
+
+def rodar(cmd, timeout=8, entrada=None):
+    """Roda com textos em inglês (para ler a saída) e nunca trava a verificação."""
+    env = {**os.environ, "LC_ALL": "C.UTF-8"}
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=entrada, env=env)
+        return r.returncode, r.stdout, r.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, "", str(e)
+
+
+def item(id_, area, titulo, estado, texto, consertos=None):
+    return {"id": id_, "area": area, "titulo": titulo, "estado": estado, "texto": texto, "consertos": consertos or []}
+
+
+def abrir(pagina, rotulo="Abrir as configurações"):
+    return {"id": "abrir", "rotulo": rotulo, "pagina": pagina}
+
+
+def conserto(id_, rotulo, **extra):
+    return {"id": id_, "rotulo": rotulo, **extra}
+
+
+def gb(b):
+    return f"{b / 1e9:.1f}".replace(".", ",") + " GB"
+
+
+def tam(b):
+    return gb(b) if b >= 1e9 else f"{round(b / 1e6)} MB"
+
+
+def ler_json(p, padrao=None):
+    try:
+        return json.loads(Path(p).read_text())
+    except (OSError, ValueError):
+        return padrao
+
+
+# ------------------------------------------------------------------ verificações
+def sistema():
+    out = []
+    # Chaveiro (Cofre e senhas dos apps). O PAM do greetd destrava no login; o
+    # nyxz-chaveiro.service liga esse chaveiro à sessão.
+    _, s, _ = rodar(["busctl", "--user", "list", "--no-legend"])
+    dono = any(l.split()[0] == "org.freedesktop.secrets" and l.split()[1] != "-" for l in s.splitlines() if l.strip())
+    controle = RUNTIME / "keyring/control"
+    if not dono and controle.exists():
+        out.append(item("chaveiro", "Sistema", "Chaveiro", "aviso",
+                        "O chaveiro foi destravado no login, mas não está ligado à sessão. O próximo app que guardar uma senha vai pedir a senha de novo.",
+                        [conserto("chaveiro-conectar", "Ligar à sessão")]))
+    elif not dono:
+        out.append(item("chaveiro", "Sistema", "Chaveiro", "ok", "O chaveiro abre quando algum app precisar."))
+    else:
+        c, s, _ = rodar(["busctl", "--user", "get-property", "org.freedesktop.secrets",
+                         "/org/freedesktop/secrets/collection/login", "org.freedesktop.Secret.Collection", "Locked"])
+        if c == 0 and "true" in s:
+            out.append(item("chaveiro", "Sistema", "Chaveiro", "aviso",
+                            "O chaveiro está travado, então o Cofre e os apps que guardam senhas vão pedir a senha. Costuma acontecer quando a senha do computador mudou ou o login foi automático.",
+                            [conserto("chaveiro-destravar", "Destravar", senha=True)]))
+        else:
+            out.append(item("chaveiro", "Sistema", "Chaveiro", "ok", "Destravado: o Cofre e as senhas dos apps abrem sem pedir nada."))
+
+    # Relógio
+    _, ntp, _ = rodar(["timedatectl", "show", "-p", "NTP", "-p", "NTPSynchronized"])
+    v = dict(l.split("=", 1) for l in ntp.splitlines() if "=" in l)
+    try:
+        ligado_ha = float(Path("/proc/uptime").read_text().split()[0])
+    except (OSError, ValueError):
+        ligado_ha = 0
+    if v.get("NTP") == "no":
+        out.append(item("relogio", "Sistema", "Relógio", "aviso",
+                        "O relógio não está acertando sozinho pela internet. Hora errada quebra sites (certificado inválido) e logins.",
+                        [conserto("ntp-ligar", "Acertar sozinho")]))
+    elif v.get("NTPSynchronized") == "no" and ligado_ha > 900:
+        out.append(item("relogio", "Sistema", "Relógio", "aviso",
+                        "O relógio ainda não conseguiu conferir a hora pela internet.", [abrir("datahora")]))
+    else:
+        out.append(item("relogio", "Sistema", "Relógio", "ok", "A hora é acertada sozinha pela internet."))
+    return out
+
+
+def video():
+    out = []
+    drivers = set()
+    for card in sorted(Path("/sys/class/drm").glob("card[0-9]")):
+        try:
+            drivers.add(os.path.basename(os.readlink(card / "device/driver")))
+        except OSError:
+            pass
+    bons = {"amdgpu", "i915", "xe", "nouveau", "nvidia", "radeon"}
+    virt = rodar(["systemd-detect-virt"])[1].strip()
+    if drivers & bons:
+        nomes = {"amdgpu": "AMD (amdgpu)", "i915": "Intel", "xe": "Intel (xe)", "nvidia": "NVIDIA", "nouveau": "NVIDIA (nouveau)", "radeon": "AMD antiga (radeon)"}
+        txt = "Placa de vídeo com driver próprio: " + ", ".join(nomes[d] for d in sorted(drivers & bons)) + "."
+        if "nouveau" in drivers:
+            out.append(item("video-driver", "Vídeo", "Placa de vídeo", "aviso",
+                            "A placa NVIDIA está com o driver livre (nouveau), que é lento para jogos. Instale o driver da NVIDIA em Apps e componentes.",
+                            [abrir("componentes")]))
+        else:
+            out.append(item("video-driver", "Vídeo", "Placa de vídeo", "ok", txt))
+    elif virt and virt != "none":
+        out.append(item("video-driver", "Vídeo", "Placa de vídeo", "ok",
+                        "Máquina virtual: a placa de vídeo é emulada e a tela é desenhada pelo processador."))
+    else:
+        out.append(item("video-driver", "Vídeo", "Placa de vídeo", "erro",
+                        "Nenhuma placa de vídeo com driver próprio. A tela funciona, mas lenta e sem aceleração para jogos e vídeos.",
+                        [abrir("componentes")]))
+
+    # Taxa de atualização das telas
+    c, s, _ = rodar(["hyprctl", "-j", "monitors"])
+    try:
+        telas = json.loads(s) if c == 0 else []
+    except ValueError:
+        telas = []
+    abaixo = []
+    for m in telas:
+        res = f"{m.get('width')}x{m.get('height')}@"
+        taxas = []
+        for modo in m.get("availableModes", []):
+            if modo.startswith(res):
+                try:
+                    taxas.append(float(modo[len(res):].rstrip("Hz")))
+                except ValueError:
+                    pass
+        atual = m.get("refreshRate", 0)
+        if taxas and max(taxas) > atual + 1:
+            abaixo.append(f"{m.get('description') or m.get('name')} está a {round(atual)} Hz, mas aguenta {round(max(taxas))} Hz")
+    if abaixo:
+        out.append(item("telas-hz", "Vídeo", "Telas", "aviso",
+                        "; ".join(abaixo) + ". Mais Hz deixa tudo mais fluido, de graça.", [abrir("telas")]))
+    elif telas:
+        out.append(item("telas-hz", "Vídeo", "Telas", "ok",
+                        ", ".join(f"{m.get('name')} a {round(m.get('refreshRate', 0))} Hz" for m in telas) + ", na taxa máxima."))
+    return out
+
+
+def som():
+    # pipewire e pipewire-pulse sobem sob demanda (pelo .socket); o wireplumber fica sempre ligado
+    def ativo(u):
+        return rodar(["systemctl", "--user", "is-active", u])[1].strip() == "active"
+    parados = [u for u in ("pipewire", "pipewire-pulse") if not ativo(u + ".service") and not ativo(u + ".socket")]
+    if not ativo("wireplumber.service"):
+        parados.append("wireplumber")
+    if parados:
+        return [item("som", "Som", "Som", "erro", "O serviço de som está parado, por isso nada toca.",
+                     [conserto("som-reiniciar", "Religar o som")])]
+    c, s, _ = rodar(["wpctl", "inspect", "@DEFAULT_AUDIO_SINK@"])
+    nome = ""
+    for l in s.splitlines():
+        m = re.search(r'node\.(?:description|nick) = "(.*)"', l)
+        if m and not nome:
+            nome = m.group(1)
+    if c != 0 or not s.strip() or "auto_null" in s:
+        return [item("som", "Som", "Som", "aviso",
+                     "Nenhuma saída de som encontrada. Confira se o fone ou a caixa estão conectados e ligados.",
+                     [conserto("som-reiniciar", "Religar o som"), abrir("som")])]
+    _, vol, _ = rodar(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"])
+    if "MUTED" in vol:
+        return [item("som", "Som", "Som", "aviso", f"A saída {nome} está no mudo.", [conserto("som-desmutar", "Tirar do mudo")])]
+    m = re.search(r"Volume: ([\d.]+)", vol)
+    if m and float(m.group(1)) < 0.05:
+        return [item("som", "Som", "Som", "aviso", f"O volume de {nome} está quase zerado.", [conserto("som-volume", "Pôr em 40%")])]
+    return [item("som", "Som", "Som", "ok", f"Som saindo por {nome}.")]
+
+
+def conecta(host, porta, t=3):
+    try:
+        socket.create_connection((host, porta), t).close()
+        return True
+    except OSError:
+        return False
+
+
+def resolve(nome):
+    with concurrent.futures.ThreadPoolExecutor(1) as ex:
+        f = ex.submit(socket.getaddrinfo, nome, 443)
+        try:
+            f.result(timeout=5)
+            return True
+        except Exception:
+            return False
+
+
+def rede():
+    out = []
+    if rodar(["systemctl", "is-active", "NetworkManager.service"])[1].strip() != "active":
+        return [item("rede", "Rede", "Conexão", "erro", "O gerenciador de rede está parado: sem cabo, sem Wi-Fi.",
+                     [conserto("rede-reiniciar", "Religar a rede")])]
+    _, s, _ = rodar(["nmcli", "-t", "-f", "STATE,CONNECTIVITY", "general"])
+    estado, _, conect = s.strip().partition(":")
+    cfg = ler_json("/etc/nyxz/rede.json", {}) or {}
+    _, ativas, _ = rodar(["nmcli", "-t", "-f", "TYPE", "connection", "show", "--active"])
+    vpn = any(t in ("wireguard", "vpn") for t in ativas.split())
+    if estado.startswith("disconnected") or estado == "asleep":
+        out.append(item("rede", "Rede", "Conexão", "erro", "Sem conexão. Conecte o cabo ou escolha uma rede Wi-Fi.", [abrir("rede")]))
+    elif conect == "portal":
+        out.append(item("rede", "Rede", "Conexão", "aviso", "Esta rede pede login (Wi-Fi de hotel, loja ou aeroporto). Abra o navegador para entrar."))
+    else:
+        internet = conecta("1.1.1.1", 443) or conecta("8.8.8.8", 443)
+        nomes = resolve("fedoraproject.org") if internet else False
+        if not internet and cfg.get("killswitch") and not vpn:
+            out.append(item("rede", "Rede", "Conexão", "aviso",
+                            "O kill switch está ligado e a VPN, desligada: a internet fica bloqueada de propósito até a VPN ligar.",
+                            [abrir("vpn", "Abrir VPN e DNS")]))
+        elif not internet:
+            out.append(item("rede", "Rede", "Conexão", "erro",
+                            "Conectado à rede, mas sem internet. Costuma ser o roteador ou a operadora: tente religar o roteador.",
+                            [conserto("rede-reiniciar", "Religar a rede do PC")]))
+        elif not nomes:
+            fix = [conserto("dns-limpar", "Limpar o DNS")]
+            if cfg.get("dns", "automatico") != "automatico":
+                fix.insert(0, conserto("dns-automatico", "Usar o DNS automático"))
+            out.append(item("rede", "Rede", "Conexão", "erro",
+                            "A internet funciona, mas os endereços dos sites não abrem (DNS).", fix))
+        else:
+            out.append(item("rede", "Rede", "Conexão", "ok", "Conectado à internet" + (", pela VPN." if vpn else ".")))
+
+    # Kill switch salvo x regra ativa (as regras de cada função ficam em tabelas próprias)
+    c, s, _ = rodar(["pkexec", "/usr/libexec/nyxz/nyxz-net-root", "estado"], timeout=10)
+    if c == 0:
+        tem = bool((json.loads(s or "{}") if s.strip().startswith("{") else {}).get("killswitch"))
+        if bool(cfg.get("killswitch")) != tem:
+            out.append(item("killswitch", "Rede", "Kill switch", "erro" if cfg.get("killswitch") else "aviso",
+                            "O kill switch está ligado nas configurações, mas a regra não está ativa: a conexão pode sair fora da VPN."
+                            if cfg.get("killswitch") else
+                            "O kill switch está desligado, mas a regra continua ativa e pode bloquear a internet.",
+                            [conserto("rede-reaplicar", "Reaplicar")]))
+        apps = ler_json(CASA / ".config/nyxz/rede-apps.json", {}) or {}
+        ativo_netd = rodar(["systemctl", "is-active", "nyxz-netd.service"])[1].strip() == "active"
+        if any(v != "normal" for v in apps.values()) and not ativo_netd:
+            out.append(item("netd", "Rede", "Internet por app", "aviso",
+                            "Há apps marcados como \"sem internet\" ou \"fora da VPN\", mas o serviço que aplica isso está parado.",
+                            [conserto("netd-ligar", "Religar")]))
+    return out
+
+
+def disco():
+    out = []
+    vistos = set()
+    for nome, caminho in (("pasta pessoal", str(CASA)), ("sistema", "/sysroot")):
+        try:
+            st = os.statvfs(caminho)
+        except OSError:
+            continue
+        chave = (st.f_blocks, st.f_frsize)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        total, livre = st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
+        if not total:
+            continue
+        pct = livre / total
+        txt = f"{gb(livre)} livres de {gb(total)} no disco da {nome}"
+        if pct < 0.05 or livre < 5e9:
+            est = "erro"
+        elif pct < 0.12 or livre < 15e9:
+            est = "aviso"
+        else:
+            est = "ok"
+        dica = "" if est == "ok" else ". Com pouco espaço, atualizações e jogos falham. A Limpeza mostra o que dá para apagar sem medo."
+        out.append(item(f"espaco-{nome.split()[0]}", "Disco", "Espaço livre", est, txt + dica + ("." if est == "ok" else ""),
+                        [] if est == "ok" else [conserto("limpeza", "Abrir a Limpeza", programa=True)]))
+    dados = ler_json("/var/lib/nyxz/discos.json", {}) or {}
+    discos = dados.get("discos", [])
+    ruins = [d for d in discos if d.get("estado") in ("ruim", "atencao")]
+    for d in ruins:
+        motivo = (d.get("motivos") or [""])[0]
+        out.append(item(f"saude-{d.get('disco', '')}", "Disco", "Saúde do disco", "erro" if d["estado"] == "ruim" else "aviso",
+                        f"{d.get('modelo', 'Disco')}: {motivo or 'precisa de atenção'}" + (" Faça backup logo." if d["estado"] == "ruim" else ""),
+                        [abrir("discos", "Abrir Discos")]))
+    if discos and not ruins:
+        out.append(item("saude", "Disco", "Saúde dos discos", "ok",
+                        f"{len(discos)} disco{'s' if len(discos) > 1 else ''} com saúde boa." if any(d.get("estado") == "bom" for d in discos)
+                        else "Os discos não informam a saúde (comum em máquina virtual)."))
+    return out
+
+
+def atualizacoes():
+    out = []
+    c, s, _ = rodar(["rpm-ostree", "status", "--json"], timeout=15)
+    try:
+        imps = json.loads(s).get("deployments", []) if c == 0 else []
+    except ValueError:
+        imps = []
+    atual = next((d for d in imps if d.get("booted")), None)
+    preparada = any(d.get("staged") for d in imps)
+    if atual and atual.get("timestamp"):
+        dias = int((time.time() - atual["timestamp"]) / 86400)
+        if preparada:
+            out.append(item("versao", "Atualizações", "Versão do sistema", "ok", "Uma versão nova já está pronta e entra quando você reiniciar."))
+        elif dias > 45:
+            out.append(item("versao", "Atualizações", "Versão do sistema", "aviso",
+                            f"Esta versão do sistema é de {dias} dias atrás. Atualizar traz correções de segurança.",
+                            [abrir("atualizacoes", "Abrir Atualizações")]))
+        else:
+            out.append(item("versao", "Atualizações", "Versão do sistema", "ok",
+                            f"Versão de {'hoje' if dias == 0 else 'ontem' if dias == 1 else f'{dias} dias atrás'}."
+                            + (" Dá para voltar à anterior se algo quebrar." if len(imps) > 1 else "")))
+    if rodar(["systemctl", "is-failed", "nyxz-atualizar.service"])[1].strip() == "failed":
+        out.append(item("atualizar-falhou", "Atualizações", "Atualização automática", "erro",
+                        "A última atualização automática falhou (às vezes é só a internet). Tente de novo pela página.",
+                        [abrir("atualizacoes", "Abrir Atualizações")]))
+    escolha = ler_json("/etc/nyxz/componentes-sistema.json", {}) or {}
+    ref = (atual or {}).get("container-image-reference", "")
+    if escolha.get("itens") and "containers-storage" not in ref:
+        out.append(item("imagem-local", "Componentes", "Apps do sistema", "aviso",
+                        "Os apps nativos que você escolheu ainda não estão nesta versão do sistema.", [abrir("componentes")]))
+    return out
+
+
+def componentes():
+    out = []
+    c, s, _ = rodar(["flatpak", "--user", "remotes", "--columns=name"])
+    if c != 0:
+        out.append(item("flatpak", "Componentes", "Loja de apps (Flatpak)", "erro", "O Flatpak não respondeu.",
+                        [conserto("flatpak-reparar", "Reparar")]))
+    elif "flathub" not in s.split():
+        out.append(item("flatpak", "Componentes", "Loja de apps (Flatpak)", "aviso",
+                        "O Flathub não está configurado, então não dá para instalar nem atualizar apps.",
+                        [conserto("flathub", "Configurar o Flathub")]))
+    else:
+        _, apps, _ = rodar(["flatpak", "--user", "list", "--app", "--columns=application"])
+        n = len([a for a in apps.splitlines() if a.strip()])
+        out.append(item("flatpak", "Componentes", "Loja de apps (Flatpak)", "ok", f"Flathub configurado, {n} app{'s' if n != 1 else ''} instalado{'s' if n != 1 else ''}."))
+    return out
+
+
+def nome_unidade(u):
+    nome = re.sub(r"^app-(Hyprland|flatpak|niri)-", "", u)
+    nome = re.sub(r"(@[^.]*)?(-[0-9a-f]{6,}|-\d+)?\.(scope|service)$", "", nome)
+    return nome.replace("\\x2d", "-")
+
+
+def memoria():
+    out = []
+    info = {}
+    for l in Path("/proc/meminfo").read_text().splitlines():
+        k, _, v = l.partition(":")
+        info[k] = int(v.split()[0]) * 1024
+    total, livre = info.get("MemTotal", 1), info.get("MemAvailable", 0)
+    usado = total - livre
+    # Quem mais usa (apps da sessão)
+    uid = os.getuid()
+    base = Path(f"/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service")
+    usos = {}
+    for pasta in (base / "app.slice", base / "nyxz.slice"):
+        for cg in pasta.rglob("*"):
+            if cg.suffix in (".scope", ".service") and (cg / "memory.current").exists():
+                try:
+                    usos[nome_unidade(cg.name)] = usos.get(nome_unidade(cg.name), 0) + int((cg / "memory.current").read_text())
+                except (OSError, ValueError):
+                    pass
+    maiores = sorted(usos.items(), key=lambda x: -x[1])[:3]
+    quem = ". Quem mais usa: " + ", ".join(f"{n} ({tam(b)})" for n, b in maiores) if maiores else ""
+    pct = livre / total
+    est = "erro" if pct < 0.08 else "aviso" if pct < 0.15 else "ok"
+    out.append(item("ram", "Memória e serviços", "Memória (RAM)", est,
+                    f"Usando {gb(usado)} de {gb(total)}{quem}." + ("" if est == "ok" else " Feche o que não estiver usando."),
+                    [] if est == "ok" else [abrir("estatisticas", "Ver Estatísticas")]))
+    try:
+        swaps = Path("/proc/swaps").read_text()
+    except OSError:
+        swaps = ""
+    if "zram" not in swaps:
+        out.append(item("zram", "Memória e serviços", "Memória comprimida (zram)", "aviso",
+                        "A memória comprimida está desligada: quando a RAM enche, os apps fecham em vez de ficar mais lentos."))
+    # Apps fechados por falta de memória nas últimas 24 h
+    _, k, _ = rodar(["journalctl", "-k", "--since", "-24h", "--no-pager", "-o", "cat", "-g", "Out of memory: Killed process"])
+    mortos = re.findall(r"Killed process \d+ \(([^)]+)\)", k)
+    if mortos:
+        out.append(item("oom", "Memória e serviços", "Falta de memória", "aviso",
+                        f"Nas últimas 24 h a memória acabou {len(mortos)} vez{'es' if len(mortos) > 1 else ''} e o sistema fechou: {', '.join(sorted(set(mortos)))}."))
+    # Serviços com falha
+    falhas = []
+    for escopo in ("sistema", "usuario"):
+        cmd = ["systemctl"] + (["--user"] if escopo == "usuario" else []) + ["list-units", "--state=failed", "--plain", "--no-legend", "--no-pager"]
+        _, s, _ = rodar(cmd)
+        for l in s.splitlines():
+            partes = l.split(None, 4)
+            if partes and UNIDADE.match(partes[0]) and partes[0] not in IGNORAR:
+                falhas.append((escopo, partes[0], partes[4] if len(partes) > 4 else partes[0]))
+    for escopo, u, desc in falhas[:8]:
+        religa = escopo == "usuario" or RELIGAVEIS.match(u)
+        out.append(item(f"falha-{u}", "Memória e serviços", "Serviço com falha", "erro",
+                        f"{desc} ({u}) parou com erro." + ("" if religa else " Gere o relatório e mande para quem for ajudar."),
+                        [conserto("reiniciar-" + escopo, "Tentar de novo", arg=u)] if religa else []))
+    if not falhas:
+        out.append(item("servicos", "Memória e serviços", "Serviços", "ok", "Nenhum serviço com falha."))
+    return out
+
+
+def verificar():
+    funcoes = [sistema, video, som, rede, disco, atualizacoes, componentes, memoria]
+    resultado = []
+    with concurrent.futures.ThreadPoolExecutor(len(funcoes)) as ex:
+        futuros = {ex.submit(f): f for f in funcoes}
+        for fut, f in futuros.items():
+            try:
+                resultado += fut.result(timeout=40)
+            except Exception as e:
+                resultado.append(item(f.__name__, "Sistema", f"Verificação de {f.__name__}", "aviso", f"Não deu para verificar: {e}"))
+    ordem = {a: i for i, a in enumerate(AREAS)}
+    resultado.sort(key=lambda x: ordem.get(x["area"], 99))
+    return resultado
+
+
+# ------------------------------------------------------------------ consertos
+def destravar(senha):
+    """Destrava o chaveiro com a senha digitada na página (sem a janela do gcr).
+
+    A sessão "plain" do Secret Service vale só para a conexão que a abriu, então a
+    abertura e o destravamento precisam sair do mesmo processo (por isso o Gio)."""
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+    except (ImportError, ValueError):
+        sys.exit("Falta o pacote python3-gobject-base nesta versão.")
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+
+    def chamar(interface, metodo, parametros, tipo=None):
+        return bus.call_sync("org.freedesktop.secrets", "/org/freedesktop/secrets", interface, metodo, parametros,
+                             GLib.VariantType(tipo) if tipo else None, Gio.DBusCallFlags.NONE, 15000, None)
+
+    sessao = chamar("org.freedesktop.Secret.Service", "OpenSession",
+                    GLib.Variant("(sv)", ("plain", GLib.Variant("s", ""))), "(vo)").unpack()[1]
+    try:
+        chamar("org.gnome.keyring.InternalUnsupportedGuiltRiddenInterface", "UnlockWithMasterPassword",
+               GLib.Variant("(o(oayays))", ("/org/freedesktop/secrets/collection/login",
+                                            (sessao, b"", senha.encode(), "text/plain"))))
+    except GLib.Error as e:
+        if "Denied" in e.message or "invalid" in e.message:
+            sys.exit("Senha errada. Use a senha que o computador tinha quando o chaveiro foi criado.")
+        sys.exit("Não deu para destravar: " + e.message)
+
+
+def consertar(id_, arg):
+    simples = {
+        "som-reiniciar": ["systemctl", "--user", "restart", "pipewire.service", "pipewire-pulse.service", "wireplumber.service"],
+        "som-desmutar": ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"],
+        "som-volume": ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.4"],
+        "rede-reiniciar": ["pkexec", ROOT, "rede-reiniciar"],
+        "dns-limpar": ["pkexec", ROOT, "dns-limpar"],
+        "dns-automatico": ["/usr/libexec/nyxz/rede", "dns", "automatico"],
+        "rede-reaplicar": ["pkexec", "/usr/libexec/nyxz/nyxz-net-root", "aplicar"],
+        "netd-ligar": ["pkexec", "/usr/libexec/nyxz/nyxz-net-root", "netd", "ligar"],
+        "ntp-ligar": ["timedatectl", "set-ntp", "true"],
+        "flatpak-reparar": ["flatpak", "repair", "--user"],
+        "flathub": ["flatpak", "remote-add", "--user", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+        "chaveiro-conectar": ["gnome-keyring-daemon", "--start", "--components=secrets"],
+    }
+    if id_ in simples:
+        c, s, e = rodar(simples[id_], timeout=300)
+    elif id_ == "chaveiro-destravar":
+        destravar(sys.stdin.read())
+        return
+    elif id_ == "reiniciar-usuario" and arg and UNIDADE.match(arg):
+        rodar(["systemctl", "--user", "reset-failed", arg])
+        c, s, e = rodar(["systemctl", "--user", "restart", arg], timeout=60)
+    elif id_ == "reiniciar-sistema" and arg and UNIDADE.match(arg):
+        c, s, e = rodar(["pkexec", ROOT, "reiniciar", arg], timeout=90)
+    elif id_ == "limpeza":
+        subprocess.Popen(["/usr/libexec/nyxz/dev-hub", "limpeza"], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    else:
+        sys.exit("Conserto desconhecido.")
+    if c != 0:
+        sys.exit((e or s).strip()[-300:] or "Não deu certo.")
+
+
+# ------------------------------------------------------------------ relatório
+def anonimizar(t, extras):
+    t = t.replace(str(CASA), "~")
+    for valor, troca in extras:
+        if valor and len(valor) >= 3:
+            t = re.sub(r"(?<![\w-])" + re.escape(valor) + r"(?![\w-])", troca, t)
+    t = re.sub(r"[\w.+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b", "<e-mail>", t)
+    t = re.sub(r"\b([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b", "<mac>", t)
+    t = re.sub(r"\b(?!127\.0\.0\.1\b)(\d{1,3}\.){3}\d{1,3}\b", "<ip>", t)
+    t = re.sub(r"\b([0-9a-fA-F]{1,4}:){3,7}[0-9a-fA-F]{1,4}\b", "<ip>", t)
+    return t
+
+
+def relatorio():
+    usuario = getpass.getuser()
+    nome_real = pwd.getpwuid(os.getuid()).pw_gecos.split(",")[0]
+    extras = [(usuario, "<usuário>")]
+    # Nomes de computador padrão (nyxz, fedora…) não identificam ninguém e apagariam "Nyxz" do texto
+    if socket.gethostname().lower() not in ("nyxz", "fedora", "localhost", "localhost-live"):
+        extras.append((socket.gethostname(), "<computador>"))
+    extras += [(p, "<usuário>") for p in nome_real.split() if len(p) >= 4]
+    try:
+        extras.append((Path("/etc/machine-id").read_text().strip(), "<id>"))
+    except OSError:
+        pass
+    for d in (ler_json("/var/lib/nyxz/discos.json", {}) or {}).get("discos", []):
+        extras.append((d.get("serie", ""), "<série>"))
+    extras.sort(key=lambda x: -len(x[0] or ""))
+
+    def secao(titulo, texto):
+        return f"\n== {titulo}\n{texto.strip()}\n"
+
+    os_rel = dict(l.split("=", 1) for l in Path("/usr/lib/os-release").read_text().splitlines() if "=" in l)
+    cpu = next((l.split(":", 1)[1].strip() for l in Path("/proc/cpuinfo").read_text().splitlines() if l.startswith("model name")), "")
+    _, gpus, _ = rodar(["sh", "-c", "lspci -nn | grep -Ei 'vga|3d|display'"])
+    _, discos, _ = rodar(["lsblk", "-d", "-o", "NAME,MODEL,SIZE,ROTA,TRAN"])
+    _, telas, _ = rodar(["hyprctl", "monitors"])
+    telas = "\n".join(l for l in telas.splitlines() if re.match(r"^(Monitor|\s+(\d+x\d+@|description|make|model|scale|vrr))", l))
+    _, hypr, _ = rodar(["hyprctl", "version"])
+    _, qs, _ = rodar(["qs", "--version"])
+    _, ostree, _ = rodar(["rpm-ostree", "status"])
+    total = int(Path("/proc/meminfo").read_text().split()[1]) * 1024
+
+    estados = {"ok": "OK   ", "aviso": "AVISO", "erro": "ERRO "}
+    linhas = [f"[{estados[i['estado']]}] {i['area']} · {i['titulo']}: {i['texto']}" for i in verificar()]
+    _, err_sis, _ = rodar(["journalctl", "-b", "-p", "err", "-n", "60", "--no-pager", "-o", "short"])
+    _, err_usu, _ = rodar(["journalctl", "--user", "-b", "-p", "err", "-n", "40", "--no-pager", "-o", "short"])
+
+    texto = (f"Relatório do Nyxz Doctor, gerado em {datetime.datetime.now():%d/%m/%Y às %H:%M}.\n"
+             "Nomes de usuário e do computador, IPs, endereços MAC, e-mails e números de série foram removidos.\n"
+             + secao("Sistema", f"{os_rel.get('PRETTY_NAME', '').strip(chr(34))}\n"
+                                f"Kernel: {os.uname().release}\nProcessador: {cpu}\nMemória: {gb(total)}\n"
+                                f"Hyprland: {hypr.splitlines()[0] if hypr else '?'}\nQuickshell: {qs.strip() or '?'}")
+             + secao("Placas de vídeo", gpus)
+             + secao("Discos", discos)
+             + secao("Telas", telas)
+             + secao("Versões do sistema (rpm-ostree)", ostree)
+             + secao("Verificações", "\n".join(linhas))
+             + secao("Erros recentes do sistema (este boot)", err_sis or "nenhum")
+             + secao("Erros recentes da sessão (este boot)", err_usu or "nenhum"))
+    texto = anonimizar(texto, extras)
+    pasta = rodar(["xdg-user-dir", "DOCUMENTS"])[1].strip()
+    pasta = Path(pasta) if pasta and Path(pasta).is_dir() and Path(pasta) != CASA else CASA
+    destino = pasta / f"Nyxz-diagnostico-{datetime.date.today().isoformat()}.txt"
+    destino.write_text(texto, encoding="utf-8")
+    print(destino)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "verificar":
+        print(json.dumps(verificar(), ensure_ascii=False))
+    elif a[0] == "consertar" and len(a) in (2, 3):
+        consertar(a[1], a[2] if len(a) == 3 else "")
+    elif a == ["relatorio"]:
+        relatorio()
+    else:
+        sys.exit("uso: doctor verificar|consertar <id> [arg]|relatorio")
+
+
+if __name__ == "__main__":
+    main()

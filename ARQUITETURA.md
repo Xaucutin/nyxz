@@ -245,7 +245,7 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Automações | Motor no shell, gatilhos pelo `nyxz-scoped`, ações pelos serviços | 🟡 |
 | Congelar apps | `cgroup.freeze` nos escopos com as exceções da seção 3.4 | 🟡 |
 | Modo streamer | Detecção de captura + regras de ocultar no shell | 🟡 |
-| Nyxz Doctor | Verificações em script + explicações + correções seguras | 🟢 |
+| Nyxz Doctor | `/usr/libexec/nyxz/doctor` (Python, só com a página aberta) + `nyxz-doctor-root` (pkexec) + página nas Configurações | ✅ |
 | Dual boot | Entrada do Windows no GRUB, NTFS, relógio local, aviso do Início rápido | 🟡 |
 
 ---

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Nyxz Doctor
+GenericName=Diagnóstico do sistema
+Comment=Confere vídeo, som, rede, disco, atualizações e memória, explica e conserta com um clique
+Exec=/usr/libexec/nyxz/configuracoes doctor
+Icon=system-help
+Categories=System;Settings;
+Keywords=doctor;diagnostico;problema;consertar;erro;ajuda;relatorio;som nao funciona;sem internet;lento;

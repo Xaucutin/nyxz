@@ -25,4 +25,13 @@ if [ ! -e "$FEITO/fuso-brasilia" ]; then
   esac
   touch "$FEITO/fuso-brasilia"
 fi
+
+# A cada boot: o idioma do sistema também vale para o que o login (PAM) inicia, como o
+# chaveiro (sem isto o gnome-keyring começa sem idioma nenhum).
+# O pam_env lê /etc/environment; aqui só a linha LANG= é mantida igual à do locale.conf.
+idioma="$(unset LANG; . /etc/locale.conf 2>/dev/null; echo "${LANG:-}")"
+if [ -n "$idioma" ] && ! grep -qx "LANG=$idioma" /etc/environment 2>/dev/null; then
+  { grep -v '^LANG=' /etc/environment 2>/dev/null; echo "LANG=$idioma"; } > /etc/environment.nyxz && mv /etc/environment.nyxz /etc/environment
+  chmod 0644 /etc/environment
+fi
 exit 0
