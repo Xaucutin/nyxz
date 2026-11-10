@@ -1,0 +1,236 @@
+#!/usr/bin/python3 -I
+# Backup automático (ideia 10): cópia incremental com o restic para um HD externo ou para a
+# nuvem (rclone: Google Drive e outros), em horário marcado, com restauração por data.
+# A senha do backup é gerada pela Nyxz e guardada no Cofre (chaveiro do sistema).
+#
+#   backup estado                    JSON: configuração, último backup, próximo horário
+#   backup configurar                JSON pela entrada: {destino, pastas, hora, ligado}
+#   backup agora                     faz o backup (uma linha JSON de progresso por vez)
+#   backup copias                    as cópias guardadas (datas)
+#   backup procurar <texto>          arquivos com esse nome nas cópias
+#   backup restaurar <copia> <caminho>   restaura em ~/Restaurado-<data>/
+#   backup nuvem                     conecta o Google Drive (abre o navegador para entrar)
+#   backup senha                     mostra a senha do backup (para guardar num papel)
+import datetime
+import json
+import os
+import secrets
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+CASA = Path.home()
+CONFIG = CASA / ".config/nyxz/backup.json"
+ESTADO = CASA / ".local/share/nyxz/backup-estado.json"
+TIMER_DIR = CASA / ".config/systemd/user/nyxz-backup.timer.d"
+SENHA = ["secret-tool", "lookup", "app", "nyxz", "tipo", "backup", "nome", "restic"]
+EXCLUIR = ["node_modules", ".cache", "target", ".venv", "venv", "__pycache__", ".next", "dist", ".gradle",
+           ".local/share/Steam", ".local/share/containers", ".var/app/*/cache", "*.tmp", ".Trash-*"]
+REMOTO = "nyxz-nuvem"
+
+
+def ler(p, padrao):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return padrao
+
+
+def gravar(p, dados):
+    Path(p).parent.mkdir(parents=True, exist_ok=True)
+    Path(p).write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def cfg():
+    padrao = {"destino": {"tipo": "pasta", "caminho": ""}, "pastas": ["~/Projetos", "~/Documentos"],
+              "hora": "21:00", "ligado": False}
+    return {**padrao, **ler(CONFIG, {})}
+
+
+def repositorio(c):
+    d = c["destino"]
+    if d.get("tipo") == "nuvem":
+        return f"rclone:{REMOTO}:Backup-Nyxz"
+    return str(Path(d.get("caminho", "")).expanduser() / "Backup-Nyxz") if d.get("caminho") else ""
+
+
+def ambiente(c):
+    env = dict(os.environ)
+    env["RESTIC_REPOSITORY"] = repositorio(c)
+    env["RESTIC_PASSWORD_COMMAND"] = " ".join(SENHA)
+    return env
+
+
+def garantir_senha():
+    if subprocess.run(SENHA, capture_output=True).returncode == 0:
+        return
+    nova = secrets.token_urlsafe(24)
+    r = subprocess.run(["secret-tool", "store", "--label=Nyxz: senha do backup", "app", "nyxz", "tipo", "backup",
+                        "nome", "restic"], input=nova, text=True, capture_output=True)
+    if r.returncode != 0:
+        sys.exit("Não deu para guardar a senha do backup no Cofre (o chaveiro está destravado?).")
+
+
+def restic(c, *args, **kw):
+    return subprocess.run(["restic", *args], env=ambiente(c), capture_output=True, text=True, **kw)
+
+
+def avisar(titulo, texto, erro=False):
+    subprocess.run(["notify-send", "-a", "Nyxz", "-i", "drive-removable-media", "-u", "critical" if erro else "normal",
+                    titulo, texto], check=False)
+
+
+def proximo():
+    r = subprocess.run(["systemctl", "--user", "show", "nyxz-backup.timer", "-p", "NextElapseUSecRealtime", "--value"],
+                       capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+# ---------------------------------------------------------------- comandos
+def estado():
+    c = cfg()
+    print(json.dumps({**c, "repositorio": repositorio(c), "ultimo": ler(ESTADO, {}), "proximo": proximo(),
+                      "restic": shutil.which("restic") is not None, "rclone": shutil.which("rclone") is not None,
+                      "nuvem_conectada": REMOTO + ":" in subprocess.run(["rclone", "listremotes"], capture_output=True,
+                                                                       text=True).stdout if shutil.which("rclone") else False},
+                     ensure_ascii=False))
+
+
+def configurar():
+    novo = json.loads(sys.stdin.read() or "{}")
+    c = cfg()
+    for k in ("destino", "pastas", "hora", "ligado"):
+        if k in novo:
+            c[k] = novo[k]
+    hora = str(c["hora"])
+    if not (len(hora) == 5 and hora[2] == ":" and hora[:2].isdigit() and hora[3:].isdigit()):
+        sys.exit("Horário inválido (use HH:MM).")
+    gravar(CONFIG, c)
+    TIMER_DIR.mkdir(parents=True, exist_ok=True)
+    (TIMER_DIR / "hora.conf").write_text(f"[Timer]\nOnCalendar=\nOnCalendar=*-*-* {hora}:00\n")
+    subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+    subprocess.run(["systemctl", "--user", "enable" if c["ligado"] else "disable", "--now", "nyxz-backup.timer"],
+                   capture_output=True)
+
+
+def agora():
+    c = cfg()
+    if not shutil.which("restic"):
+        sys.exit("O restic não está instalado nesta versão.")
+    if not repositorio(c):
+        sys.exit("Escolha onde guardar o backup.")
+    if c["destino"].get("tipo") == "pasta":
+        base = Path(c["destino"]["caminho"]).expanduser()
+        if not base.is_dir():
+            avisar("Backup adiado", "O HD do backup não está conectado. Conecte e clique em \"Fazer backup agora\".")
+            sys.exit("O HD do backup não está conectado.")
+    garantir_senha()
+    if restic(c, "cat", "config").returncode != 0:
+        print(json.dumps({"progresso": "Criando o lugar do backup…"}), flush=True)
+        r = restic(c, "init")
+        if r.returncode != 0:
+            erro = r.stderr.strip()[-300:]
+            avisar("O backup falhou", erro, True)
+            sys.exit("Não deu para criar o backup: " + erro)
+    pastas = [str(Path(p).expanduser()) for p in c["pastas"] if Path(p).expanduser().exists()]
+    if not pastas:
+        sys.exit("Nenhuma das pastas escolhidas existe.")
+    args = ["backup", "--json", "--one-file-system", "--tag", "nyxz"] + [f"--exclude={e}" for e in EXCLUIR] + pastas
+    inicio = datetime.datetime.now()
+    p = subprocess.Popen(["restic", *args], env=ambiente(c), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    resumo = {}
+    for linha in p.stdout:
+        try:
+            d = json.loads(linha)
+        except ValueError:
+            continue
+        if d.get("message_type") == "status":
+            print(json.dumps({"progresso": f"{round(d.get('percent_done', 0) * 100)}%"}), flush=True)
+        elif d.get("message_type") == "summary":
+            resumo = d
+    erro = p.stderr.read()
+    p.wait()
+    ok = p.returncode in (0, 3)            # 3: alguns arquivos não puderam ser lidos
+    estado_novo = {"quando": inicio.isoformat(timespec="minutes"), "ok": ok,
+                   "novos": resumo.get("files_new", 0), "mudados": resumo.get("files_changed", 0),
+                   "enviado": resumo.get("data_added", 0), "erro": "" if ok else erro.strip()[-300:]}
+    gravar(ESTADO, estado_novo)
+    if not ok:
+        avisar("O backup falhou", estado_novo["erro"] or "Veja em Configurações → Backup.", True)
+        sys.exit("O backup falhou.")
+    # Guarda 7 diários, 4 semanais e 6 mensais; apaga o resto
+    restic(c, "forget", "--tag", "nyxz", "--keep-daily", "7", "--keep-weekly", "4", "--keep-monthly", "6", "--prune")
+    print(json.dumps({"fim": estado_novo}), flush=True)
+
+
+def copias():
+    c = cfg()
+    r = restic(c, "snapshots", "--json", "--tag", "nyxz")
+    try:
+        lista = json.loads(r.stdout or "[]")
+    except ValueError:
+        lista = []
+    print(json.dumps([{"id": s["short_id"], "quando": s["time"][:16].replace("T", " "), "pastas": s.get("paths", [])}
+                      for s in reversed(lista)], ensure_ascii=False))
+
+
+def procurar(texto):
+    c = cfg()
+    r = restic(c, "find", "--json", "--tag", "nyxz", f"*{texto}*")
+    achados = []
+    try:
+        for bloco in json.loads(r.stdout or "[]"):
+            for m in bloco.get("matches", [])[:50]:
+                achados.append({"copia": bloco.get("snapshot", "")[:8], "caminho": m["path"], "tamanho": m.get("size", 0),
+                                "modificado": m.get("mtime", "")[:16].replace("T", " "), "tipo": m.get("type", "")})
+    except (ValueError, KeyError):
+        pass
+    print(json.dumps(achados[:200], ensure_ascii=False))
+
+
+def restaurar(copia, caminho):
+    c = cfg()
+    destino = CASA / f"Restaurado-{datetime.date.today().isoformat()}"
+    r = restic(c, "restore", copia, "--target", str(destino), "--include", caminho)
+    if r.returncode != 0:
+        sys.exit("Não deu para restaurar: " + r.stderr.strip()[-300:])
+    # O restic recria o caminho inteiro dentro da pasta (ex.: …/home/voce/Projetos/x.py)
+    print(destino / caminho.lstrip("/"))
+
+
+def nuvem():
+    if not shutil.which("rclone"):
+        sys.exit("O rclone não está instalado nesta versão.")
+    # drive.file: a Nyxz só enxerga os arquivos que ela mesma criou no seu Drive
+    r = subprocess.run(["rclone", "config", "create", REMOTO, "drive", "scope=drive.file"],
+                       capture_output=True, text=True, timeout=600)
+    if r.returncode != 0:
+        sys.exit("Não deu para conectar ao Google Drive: " + r.stderr.strip()[-300:])
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a == ["configurar"]:
+        configurar()
+    elif a == ["agora"]:
+        agora()
+    elif a == ["copias"]:
+        copias()
+    elif a[0] == "procurar" and len(a) == 2:
+        procurar(a[1])
+    elif a[0] == "restaurar" and len(a) == 3:
+        restaurar(a[1], a[2])
+    elif a == ["nuvem"]:
+        nuvem()
+    elif a == ["senha"]:
+        garantir_senha()
+        print(subprocess.run(SENHA, capture_output=True, text=True).stdout.strip())
+    else:
+        sys.exit("uso: backup estado|configurar|agora|copias|procurar <texto>|restaurar <copia> <caminho>|nuvem|senha")
+
+
+if __name__ == "__main__":
+    main()

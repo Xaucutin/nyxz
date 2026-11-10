@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Ligar ou desligar o "Voltar no tempo": pede a senha (mexe nas fotos do disco).
+     Depois de ligado, o usuário usa as fotos sem senha pelo próprio Snapper. -->
+<policyconfig>
+  <vendor>Nyxz</vendor>
+  <action id="org.nyxz.snapshots">
+    <description>Turn home folder snapshots on or off</description>
+    <description xml:lang="pt_BR">Ligar ou desligar as fotos da pasta pessoal (Voltar no tempo)</description>
+    <message>Authentication is required to change home folder snapshots</message>
+    <message xml:lang="pt_BR">É preciso autenticar para mudar as fotos da pasta pessoal</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/nyxz/nyxz-snap-root</annotate>
+  </action>
+</policyconfig>

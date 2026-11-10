@@ -1,0 +1,8 @@
+[Unit]
+Description=Nyxz: backup automático (restic)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nyxz/backup agora
+Nice=15
+IOSchedulingClass=idle

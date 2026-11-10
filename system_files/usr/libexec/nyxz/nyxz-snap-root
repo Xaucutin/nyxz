@@ -1,0 +1,93 @@
+#!/usr/bin/python3 -I
+"""Voltar no tempo (snapshots da pasta pessoal): a parte que precisa de administrador.
+
+  nyxz-snap-root ativar      cria a configuração "home" do Snapper em /var/home, com
+                             fotos de hora em hora (24 por hora, 7 diárias, 4 semanais) e
+                             libera o usuário que pediu para listar, tirar e ler as fotos
+  nyxz-snap-root desativar   para as fotos novas e apaga as antigas (e a configuração)
+
+Chamado com pkexec (pede a senha de administrador uma vez). Depois disso o próprio
+usuário usa o Snapper sem senha (ALLOW_USERS), só na configuração dele.
+"""
+import json
+import os
+import pwd
+import subprocess
+import sys
+
+CONFIG = "home"
+CAMINHO = "/var/home"
+AJUSTES = {
+    "TIMELINE_CREATE": "yes", "TIMELINE_CLEANUP": "yes",
+    "TIMELINE_LIMIT_HOURLY": "24", "TIMELINE_LIMIT_DAILY": "7", "TIMELINE_LIMIT_WEEKLY": "4",
+    "TIMELINE_LIMIT_MONTHLY": "0", "TIMELINE_LIMIT_QUARTERLY": "0", "TIMELINE_LIMIT_YEARLY": "0",
+    "NUMBER_CLEANUP": "yes", "NUMBER_LIMIT": "20",
+    # Libera a leitura das fotos para o usuário (ACL na pasta .snapshots)
+    "SYNC_ACL": "yes",
+    # Sem fotos de antes/depois a cada mudança de pacote (o sistema é imutável)
+    "BACKGROUND_COMPARISON": "no",
+}
+
+
+def erro(msg):
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def rodar(*args):
+    return subprocess.run(args, capture_output=True, text=True)
+
+
+def usuario():
+    uid = os.environ.get("PKEXEC_UID", "")
+    if not uid.isdigit():
+        erro("Use pela Nyxz (pkexec).")
+    return pwd.getpwuid(int(uid)).pw_name
+
+
+def ativar():
+    if rodar("findmnt", "-n", "-o", "FSTYPE", "--target", CAMINHO).stdout.strip() != "btrfs":
+        erro("A pasta pessoal não está num disco Btrfs: as fotos precisam dele.")
+    if rodar("btrfs", "subvolume", "show", CAMINHO).returncode != 0:
+        erro(f"{CAMINHO} não é um subvolume Btrfs.")
+    existe = CONFIG in rodar("snapper", "list-configs").stdout.split()
+    if not existe:
+        r = rodar("snapper", "-c", CONFIG, "create-config", CAMINHO)
+        if r.returncode != 0:
+            erro("O Snapper não criou a configuração: " + r.stderr.strip())
+    nome = usuario()
+    try:
+        atual = json.loads(rodar("snapper", "--jsonout", "-c", CONFIG, "get-config").stdout or "{}")
+    except ValueError:
+        atual = {}
+    usuarios = set(str(atual.get("ALLOW_USERS", "")).split())
+    usuarios.add(nome)
+    valores = [f"{k}={v}" for k, v in AJUSTES.items()] + [f"ALLOW_USERS={' '.join(sorted(usuarios))}"]
+    r = rodar("snapper", "-c", CONFIG, "set-config", *valores)
+    if r.returncode != 0:
+        erro("Não deu para ajustar o Snapper: " + r.stderr.strip())
+    rodar("systemctl", "enable", "--now", "snapper-timeline.timer", "snapper-cleanup.timer")
+    # Primeira foto agora
+    rodar("snapper", "-c", CONFIG, "create", "-c", "timeline", "-d", "Primeira foto (Voltar no tempo ligado)")
+
+
+def desativar():
+    if CONFIG not in rodar("snapper", "list-configs").stdout.split():
+        return
+    r = rodar("snapper", "-c", CONFIG, "delete-config")
+    if r.returncode != 0:
+        erro("Não deu para desligar: " + r.stderr.strip())
+
+
+def main():
+    a = sys.argv[1:]
+    if a == ["ativar"]:
+        ativar()
+    elif a == ["desativar"]:
+        desativar()
+    else:
+        erro(__doc__)
+
+
+if __name__ == "__main__":
+    main()

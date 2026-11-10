@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Backup
+GenericName=Cópia de segurança
+Comment=Backup automático dos projetos para um HD externo ou o Google Drive
+Exec=/usr/libexec/nyxz/configuracoes backup
+Icon=drive-removable-media
+Categories=System;Utility;
+Keywords=backup;copia;seguranca;restic;rclone;google drive;hd externo;restaurar;recuperar;

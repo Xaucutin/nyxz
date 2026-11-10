@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Voltar no tempo
+GenericName=Versões anteriores dos arquivos
+Comment=Recupere arquivos apagados ou estragados pelas fotos da pasta pessoal
+Exec=/usr/libexec/nyxz/configuracoes voltar
+Icon=document-open-recent
+Categories=System;Utility;
+Keywords=voltar;snapshot;foto;versao;anterior;recuperar;apagado;restaurar;snapper;historico;

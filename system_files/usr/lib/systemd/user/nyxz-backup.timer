@@ -1,0 +1,12 @@
+[Unit]
+Description=Nyxz: horário do backup automático
+
+[Timer]
+# O horário escolhido em Configurações → Backup fica em nyxz-backup.timer.d/hora.conf
+OnCalendar=*-*-* 21:00:00
+# Se o PC estava desligado no horário, faz quando ligar
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

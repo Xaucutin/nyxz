@@ -71,3 +71,7 @@ nftables
 smartmontools
 nvme-cli
 fio
+# Voltar no tempo (fotos da pasta pessoal) e backup automático
+snapper
+restic
+rclone

@@ -1,0 +1,181 @@
+#!/usr/bin/python3 -I
+# Voltar no tempo (ideia 19): fotos da pasta pessoal pelo Snapper (Btrfs), do lado do usuário.
+#
+#   voltar-no-tempo estado                 JSON: ligado? fotos, pastas que ficam de fora
+#   voltar-no-tempo ativar|desativar       (pede a senha de administrador uma vez)
+#   voltar-no-tempo foto [descrição]       tira uma foto agora
+#   voltar-no-tempo versoes <arquivo>      versões diferentes do arquivo/pasta nas fotos
+#   voltar-no-tempo restaurar <foto> <arquivo> [substituir]
+#                                          sem "substituir", restaura como cópia ao lado
+#   voltar-no-tempo abrir <arquivo>        (Dolphin → "Versões anteriores")
+import datetime
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+CONFIG = "home"
+RAIZ = "/var/home"
+FOTOS = Path(RAIZ) / ".snapshots"
+ROOT = "/usr/libexec/nyxz/nyxz-snap-root"
+CASA = Path(os.path.realpath(Path.home()))
+# Pesadas e descartáveis: viram subvolumes próprios (o Btrfs não as inclui nas fotos)
+FORA = [".cache", ".local/share/Steam", ".local/share/containers"]
+PEDIDO = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "nyxz-voltar-arquivo"
+
+
+def snapper(*args):
+    return subprocess.run(["snapper", "--jsonout", "-c", CONFIG, *args], capture_output=True, text=True)
+
+
+def fotos():
+    r = snapper("list")
+    if r.returncode != 0:
+        return None
+    try:
+        lista = json.loads(r.stdout).get(CONFIG, [])
+    except ValueError:
+        return None
+    return [{"numero": f["number"], "data": f.get("date", ""), "tipo": f.get("cleanup", "") or f.get("type", ""),
+             "descricao": f.get("description", "")} for f in lista if f.get("number")]
+
+
+def e_subvolume(p):
+    try:
+        return os.stat(p).st_ino == 256          # raiz de subvolume Btrfs
+    except OSError:
+        return False
+
+
+def estado():
+    lista = fotos()
+    print(json.dumps({
+        "instalado": shutil.which("snapper") is not None,
+        "ligado": lista is not None,
+        "fotos": list(reversed(lista or []))[:200],
+        "fora": [{"pasta": "~/" + p, "separada": e_subvolume(CASA / p), "existe": (CASA / p).exists()} for p in FORA],
+    }, ensure_ascii=False))
+
+
+def separar(rel):
+    """Transforma uma pasta em subvolume (cópia instantânea no Btrfs, sem duplicar espaço)."""
+    p = CASA / rel
+    if e_subvolume(p):
+        return
+    if rel == ".local/share/Steam" and subprocess.run(["pgrep", "-x", "steam"], capture_output=True).returncode == 0:
+        return        # com a Steam aberta, separa na próxima vez
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if not p.exists():
+        subprocess.run(["btrfs", "subvolume", "create", str(p)], capture_output=True)
+        return
+    if rel == ".local/share/containers":
+        return        # arquivos de outros donos (Podman): fica como está
+    novo = p.with_name(p.name + ".nyxz-novo")
+    if subprocess.run(["btrfs", "subvolume", "create", str(novo)], capture_output=True).returncode != 0:
+        return
+    if subprocess.run(["cp", "-a", "--reflink=always", f"{p}/.", str(novo)], capture_output=True).returncode != 0:
+        subprocess.run(["btrfs", "subvolume", "delete", str(novo)], capture_output=True)
+        shutil.rmtree(novo, ignore_errors=True)
+        return
+    velho = p.with_name(p.name + ".nyxz-velho")
+    p.rename(velho)
+    novo.rename(p)
+    shutil.rmtree(velho, ignore_errors=True)
+
+
+def ativar():
+    if not shutil.which("snapper"):
+        sys.exit("O Voltar no tempo não está instalado nesta versão.")
+    for rel in FORA:
+        try:
+            separar(rel)
+        except OSError:
+            pass
+    r = subprocess.run(["pkexec", ROOT, "ativar"], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(r.stderr.strip() or "Não deu para ligar.")
+
+
+def caminho_relativo(arquivo):
+    real = os.path.realpath(os.path.expanduser(arquivo))
+    if not real.startswith(RAIZ + "/"):
+        sys.exit("Só arquivos da pasta pessoal têm versões anteriores.")
+    return real[len(RAIZ) + 1:]
+
+
+def versoes(arquivo):
+    rel = caminho_relativo(arquivo)
+    vistas, saida = set(), []
+    atual = Path(RAIZ) / rel
+    try:
+        st = atual.stat()
+        vistas.add((int(st.st_mtime), st.st_size))
+    except OSError:
+        pass              # o arquivo foi apagado: todas as versões contam
+    for f in reversed(fotos() or []):
+        alvo = FOTOS / str(f["numero"]) / "snapshot" / rel
+        try:
+            st = alvo.stat()
+        except OSError:
+            continue
+        chave = (int(st.st_mtime), st.st_size)
+        if chave in vistas:
+            continue
+        vistas.add(chave)
+        saida.append({"foto": f["numero"], "data_foto": f["data"], "tamanho": st.st_size, "pasta": alvo.is_dir(),
+                      "modificado": datetime.datetime.fromtimestamp(st.st_mtime).isoformat(timespec="minutes")})
+    print(json.dumps({"arquivo": str(atual), "existe": atual.exists(), "versoes": saida}, ensure_ascii=False))
+
+
+def restaurar(numero, arquivo, substituir):
+    rel = caminho_relativo(arquivo)
+    origem = FOTOS / str(int(numero)) / "snapshot" / rel
+    if not origem.exists():
+        sys.exit("Essa versão não está mais nas fotos.")
+    destino = Path(RAIZ) / rel
+    if destino.exists() and not substituir:
+        data = next((f["data"] for f in fotos() or [] if f["numero"] == int(numero)), "")
+        sufixo = f" (versão de {data[8:10]}-{data[5:7]} {data[11:13]}h{data[14:16]})" if data else " (versão anterior)"
+        destino = destino.with_name(destino.stem + sufixo + destino.suffix)
+    elif destino.exists():
+        # Guarda a atual na lixeira antes de substituir (dá para voltar atrás)
+        subprocess.run(["gio", "trash", str(destino)], capture_output=True)
+        if destino.exists():
+            sys.exit("Não deu para mover a versão atual para a lixeira.")
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    if origem.is_dir():
+        shutil.copytree(origem, destino, symlinks=True)
+    else:
+        shutil.copy2(origem, destino)
+    print(destino)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a == ["ativar"]:
+        ativar()
+    elif a == ["desativar"]:
+        r = subprocess.run(["pkexec", ROOT, "desativar"], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(r.stderr.strip() or "Não deu para desligar.")
+    elif a[0] == "foto":
+        r = snapper("create", "-c", "number", "-d", " ".join(a[1:]) or "Foto manual")
+        if r.returncode != 0:
+            sys.exit(r.stderr.strip() or "Não deu para tirar a foto.")
+    elif a[0] == "versoes" and len(a) == 2:
+        versoes(a[1])
+    elif a[0] == "restaurar" and len(a) in (3, 4) and a[1].isdigit():
+        restaurar(a[1], a[2], len(a) == 4 and a[3] == "substituir")
+    elif a[0] == "abrir" and len(a) == 2:
+        PEDIDO.write_text(os.path.realpath(a[1]))
+        subprocess.Popen(["/usr/libexec/nyxz/configuracoes", "voltar"], start_new_session=True)
+    else:
+        sys.exit("uso: voltar-no-tempo estado|ativar|desativar|foto|versoes <arquivo>|restaurar <foto> <arquivo> [substituir]")
+
+
+if __name__ == "__main__":
+    main()

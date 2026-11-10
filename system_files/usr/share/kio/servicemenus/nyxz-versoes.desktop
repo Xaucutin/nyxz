@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+MimeType=all/all;
+Actions=versoes;
+X-KDE-Priority=TopLevel
+
+[Desktop Action versoes]
+Name=Versões anteriores
+Icon=document-open-recent
+Exec=/usr/libexec/nyxz/voltar-no-tempo abrir %f

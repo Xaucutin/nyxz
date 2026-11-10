@@ -22,6 +22,7 @@ Scope {
         if (m.indexOf("/usr/libexec/nyxz/componentes") >= 0) return "Instalar ou remover apps do sistema";
         if (m.indexOf("/usr/libexec/nyxz/atualizar") >= 0) return "Atualizar o sistema";
         if (m.indexOf("/usr/libexec/nyxz/nyxz-dev-root") >= 0) return "Registrar domínios .test";
+        if (f.actionId === "org.nyxz.snapshots") return "Voltar no tempo (fotos da pasta pessoal)";
         if (m.indexOf("sshd") >= 0) return "Servidor SSH deste computador";
         if (f.actionId.indexOf("org.freedesktop.timedate1") === 0) return "Mudar data e hora";
         if (f.actionId.indexOf("org.freedesktop.NetworkManager") === 0) return "Mudar a rede";
