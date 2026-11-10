@@ -211,6 +211,38 @@ PanelWindow {
                 Layout.rightMargin: 6
             }
 
+            // ---------------------------------------------- Modo jogo e replay (só quando ligados)
+            Item {
+                visible: JogoEstado.modoJogo
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 30
+                Image { anchors.centerIn: parent; source: "icones/controle.svg"; sourceSize: Qt.size(17, 17); opacity: 0.85 }
+            }
+            Rectangle {
+                id: botaoReplay
+                visible: JogoEstado.replay
+                Layout.preferredWidth: rotuloReplay.implicitWidth + 24
+                Layout.preferredHeight: 24
+                Layout.rightMargin: 4
+                radius: 12
+                color: areaReplay.containsMouse ? Tema.hover : Tema.elevado
+                border.width: 1
+                border.color: Tema.borda
+                Rectangle {
+                    x: 9; anchors.verticalCenter: parent.verticalCenter
+                    width: 6; height: 6; radius: 3
+                    color: Tema.erro
+                }
+                Text {
+                    id: rotuloReplay
+                    x: 19; anchors.verticalCenter: parent.verticalCenter
+                    text: "replay"
+                    font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto2
+                }
+                // Clique salva os últimos segundos (o mesmo que Alt+F10)
+                MouseArea { id: areaReplay; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.salvarReplay() }
+            }
+
             // ---------------------------------------------- bandeja (fixar/ocultar como no Windows)
             Bandeja {
                 janelaBarra: barra

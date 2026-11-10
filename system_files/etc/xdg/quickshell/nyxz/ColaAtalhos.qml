@@ -45,6 +45,10 @@ PanelWindow {
             ["", "Rolar no ícone de som", "Mudar o volume"],
             ["", "Rolar no mini player", "Faixa anterior ou seguinte"]
         ]},
+        { nome: "Jogos", itens: [
+            ["Alt", "F10", "Salvar os últimos 30 segundos (replay)"],
+            ["Alt", "Shift + F10", "Ligar ou desligar o replay"]
+        ]},
         { nome: "Barra", itens: [
             ["", "Botão do meio no app", "Fechar o app"],
             ["", "Botão direito no app", "Fechar ou finalizar tarefa"],

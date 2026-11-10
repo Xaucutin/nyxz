@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+# Chamado pelo gpu-screen-recorder depois de salvar um replay ($1 = arquivo).
+exec /usr/libexec/nyxz/replay salvo "${1:-}"

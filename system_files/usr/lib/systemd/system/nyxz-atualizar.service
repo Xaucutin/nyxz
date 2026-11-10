@@ -9,6 +9,7 @@ ConditionACPower=true
 Type=oneshot
 # Só baixa e prepara a nova versão. Nunca reinicia o PC sozinho
 # (o bootc-fetch-apply-updates.timer padrão reinicia, por isso fica desligado).
+Environment=NYXZ_AUTOMATICO=1
 ExecStart=/usr/libexec/nyxz/atualizar
 Nice=19
 IOSchedulingClass=idle

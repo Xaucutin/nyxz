@@ -298,6 +298,16 @@ async fn mover_jogo(systemd: &SystemdProxy<'_>, steam: &str, appid: &str, pids: 
     }
 }
 
+// ------------------------------------------------------------------ Modo jogo
+
+/// Chama /usr/libexec/nyxz/modo-jogo em segundo plano (o sh sai na hora; o script
+/// continua sozinho, sem prender o serviço nem virar processo zumbi).
+fn modo_jogo(acao: &str, appid: &str) {
+    let _ = std::process::Command::new("sh")
+        .args(["-c", "/usr/libexec/nyxz/modo-jogo \"$0\" \"$1\" >/dev/null 2>&1 &", acao, appid])
+        .status();
+}
+
 // ------------------------------------------------------------------ laço principal
 
 #[tokio::main(flavor = "current_thread")]
@@ -362,6 +372,7 @@ async fn main() -> zbus::Result<()> {
                     }
                     if let Some(appid) = terminou {
                         eprintln!("nyxz-scoped: jogo {appid} fechado");
+                        modo_jogo("desligar", &appid);
                         let _ = Servico::jogo_terminou(&emissor, &appid).await;
                     }
                 }
@@ -394,6 +405,7 @@ async fn main() -> zbus::Result<()> {
                     if let Some(nova) = mover_jogo(&systemd, &unidade, &appid, &pids).await {
                         eprintln!("nyxz-scoped: jogo {appid} movido para {nova} ({} processos)", pids.len());
                         estado.lock().unwrap().jogo = Some((appid.clone(), nova));
+                        modo_jogo("ligar", &appid);
                         let _ = Servico::jogo_iniciou(&emissor, &appid).await;
                         mudou = true;
                         break;

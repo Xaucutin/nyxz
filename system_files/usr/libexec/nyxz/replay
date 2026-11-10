@@ -1,0 +1,58 @@
+#!/usr/bin/bash
+# Replay instantâneo (ideia 15), com o gpu-screen-recorder: guarda os últimos segundos
+# na memória e salva quando você pede. Desligado, não existe processo nenhum.
+#   replay ligar | desligar | alternar | estado
+#   replay salvar           salva os últimos N segundos (Alt+F10)
+#   replay executar         (o serviço nyxz-replay roda isto)
+#   replay salvo <arquivo>  (o gravador chama isto depois de salvar)
+# Ajustes em ~/.config/nyxz/replay.json: segundos, fps, qualidade, audio (tudo|nenhum).
+set -u
+UNIDADE=nyxz-replay.service
+CFG="$HOME/.config/nyxz/replay.json"
+
+valor() { # chave padrão
+  python3 -I -c 'import json,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception: d={}
+print(d.get(sys.argv[2], sys.argv[3]))' "$CFG" "$1" "$2"
+}
+
+case "${1:-}" in
+  ligar)
+    command -v gpu-screen-recorder >/dev/null || { notify-send -a Nyxz "Replay indisponível" "O gravador não está instalado nesta versão."; exit 1; }
+    systemctl --user start "$UNIDADE"
+    ;;
+  desligar)
+    systemctl --user stop "$UNIDADE"
+    ;;
+  alternar)
+    if systemctl --user is-active --quiet "$UNIDADE"; then "$0" desligar; notify-send -a Nyxz -i media-record "Replay desligado" "Nada está sendo gravado."
+    else "$0" ligar && notify-send -a Nyxz -i media-record "Replay ligado" "Alt+F10 salva os últimos $(valor segundos 30) segundos."; fi
+    ;;
+  estado)
+    systemctl --user is-active --quiet "$UNIDADE"
+    ;;
+  salvar)
+    if systemctl --user is-active --quiet "$UNIDADE"; then
+      systemctl --user kill --signal=SIGUSR1 "$UNIDADE"
+    else
+      notify-send -a Nyxz -i media-record "Replay desligado" "Ligue no painel da barra (ou Alt+Shift+F10) para poder salvar."
+    fi
+    ;;
+  salvo)
+    notify-send -a Nyxz -i media-record "Replay salvo" "$(basename "${2:-}") em Vídeos/Replays"
+    ;;
+  executar)
+    pasta="$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Vídeos")/Replays"
+    mkdir -p "$pasta"
+    args=(-w screen -c mp4 -f "$(valor fps 60)" -r "$(valor segundos 30)" -q "$(valor qualidade high)" -o "$pasta" -sc "/usr/libexec/nyxz/replay-salvo")
+    [ "$(valor audio tudo)" = tudo ] && args+=(-a default_output)
+    # Máquina virtual não tem codificador de vídeo na placa: grava pelo processador.
+    systemd-detect-virt --quiet 2>/dev/null && args+=(-encoder cpu)
+    exec gpu-screen-recorder "${args[@]}"
+    ;;
+  *)
+    echo "Uso: replay ligar|desligar|alternar|estado|salvar" >&2
+    exit 2
+    ;;
+esac

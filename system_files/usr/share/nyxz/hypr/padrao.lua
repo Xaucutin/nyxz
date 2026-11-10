@@ -117,6 +117,9 @@ hl.bind(mod .. " + RETURN", hl.dsp.exec_cmd(terminal))
 hl.bind(mod .. " + SPACE",  hl.dsp.exec_cmd(lancador))
 -- Cola de atalhos: todos os atalhos, com busca
 tentar(function() hl.bind(mod .. " + slash", hl.dsp.exec_cmd("qs -c nyxz ipc call atalhos alternar")) end)
+-- Replay instantâneo: Alt+F10 salva os últimos segundos; Alt+Shift+F10 liga/desliga
+tentar(function() hl.bind("ALT + F10", hl.dsp.exec_cmd("/usr/libexec/nyxz/replay salvar")) end)
+tentar(function() hl.bind("ALT + SHIFT + F10", hl.dsp.exec_cmd("/usr/libexec/nyxz/replay alternar")) end)
 -- Painel rápido (brilho e luz azul)
 tentar(function() hl.bind(mod .. " + B", hl.dsp.exec_cmd("qs -c nyxz ipc call rapido alternar")) end)
 hl.bind(mod .. " + Q",      hl.dsp.window.close())

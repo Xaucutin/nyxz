@@ -24,7 +24,7 @@ Scope {
 
     PanelWindow {
         id: janela
-        visible: servidor.trackedNotifications.values.length > 0
+        visible: servidor.trackedNotifications.values.length > 0 && !Estado.naoPerturbe
         // Ajuste "canto das notificações": superior-direito, superior-esquerdo,
         // inferior-direito ou inferior-esquerdo.
         readonly property string canto: Ajustes.cantoNotificacoes

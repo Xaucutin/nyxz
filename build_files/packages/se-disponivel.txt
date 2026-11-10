@@ -56,3 +56,6 @@ libsecret
 caddy
 mkcert
 nss-tools
+# Jogos: replay instantâneo (COPR brycensranch) e perfil de desempenho do processador
+gpu-screen-recorder
+power-profiles-daemon

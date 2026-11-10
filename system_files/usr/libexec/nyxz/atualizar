@@ -3,6 +3,18 @@
 # para o próximo boot; nunca reinicia o PC.
 # Com apps nativos escolhidos, reconstrói a imagem local sobre a base nova.
 set -u
+# Modo jogo: a atualização automática espera o jogo fechar (tenta de novo em 30 min).
+# O botão "Atualizar" das Configurações não passa por aqui (NYXZ_AUTOMATICO não vem).
+if [ "${NYXZ_AUTOMATICO:-}" = 1 ]; then
+  for f in /run/user/*/nyxz-modo-jogo.json; do
+    [ -e "$f" ] || continue
+    if python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("cfg", {}).get("adiarAtualizacoes", True) else 1)' "$f"; then
+      systemd-run --quiet --on-active=30min --unit=nyxz-atualizar-depois systemctl start nyxz-atualizar.service 2>/dev/null || true
+      echo "Jogo aberto: atualização adiada por 30 minutos."
+      exit 0
+    fi
+  done
+fi
 if [ -s /etc/nyxz/componentes-sistema.json ] \
    && python3 -I -c 'import json,sys; sys.exit(0 if json.load(open("/etc/nyxz/componentes-sistema.json")).get("itens") else 1)'; then
   exec /usr/libexec/nyxz/componentes reconstruir

@@ -1,0 +1,12 @@
+[Unit]
+Description=Nyxz: replay instantâneo (gpu-screen-recorder)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# O arquivo marca "gravando" para a barra mostrar o ícone; some ao parar.
+ExecStartPre=/usr/bin/touch %t/nyxz-replay-ativo
+ExecStart=/usr/libexec/nyxz/replay executar
+ExecStopPost=/usr/bin/rm -f %t/nyxz-replay-ativo
+Restart=on-failure
+RestartSec=3

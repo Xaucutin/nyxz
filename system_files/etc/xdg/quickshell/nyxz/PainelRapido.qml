@@ -213,6 +213,79 @@ PanelWindow {
                 text: "Liga às " + LuzAzul.inicio + " e desliga às " + LuzAzul.fim + "."
                 font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto3
             }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                Layout.topMargin: 4
+                color: "#1A1A20"
+            }
+
+            // ---------------------------------------------- jogos e foco
+            Linha {
+                titulo: "Modo jogo"
+                detalhe: "Liga sozinho com jogos da Steam; aqui é para os outros."
+                ligado: JogoEstado.modoJogo
+                onAlternado: JogoEstado.alternarModoJogo()
+            }
+            Linha {
+                titulo: "Replay instantâneo"
+                detalhe: JogoEstado.replay ? "Gravando na memória. Alt+F10 salva." : "Desligado: não grava nada."
+                ligado: JogoEstado.replay
+                onAlternado: JogoEstado.alternarReplay()
+            }
+            Rectangle {
+                visible: JogoEstado.replay
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                radius: 6
+                color: areaSalvar.containsMouse ? Tema.hover : Tema.elevado
+                border.width: 1
+                border.color: Tema.borda
+                Text {
+                    anchors.centerIn: parent
+                    text: "Salvar os últimos segundos"
+                    font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto
+                }
+                MouseArea { id: areaSalvar; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.salvarReplay() }
+            }
+            Linha {
+                titulo: "Não perturbe"
+                detalhe: "Guarda as notificações e mostra depois."
+                ligado: Estado.naoPerturbeManual
+                onAlternado: Estado.naoPerturbeManual = !Estado.naoPerturbeManual
+            }
+        }
+    }
+
+    component Linha: RowLayout {
+        id: linha
+        property string titulo: ""
+        property string detalhe: ""
+        property bool ligado: false
+        signal alternado()
+        Layout.fillWidth: true
+        spacing: 10
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 1
+            Text { text: linha.titulo; font.family: Tema.fonte; font.pixelSize: 13; color: Tema.texto }
+            Text { Layout.fillWidth: true; text: linha.detalhe; wrapMode: Text.Wrap; font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto3 }
+        }
+        Rectangle {
+            implicitWidth: 34
+            implicitHeight: 20
+            radius: 10
+            color: linha.ligado ? Tema.suave : Tema.trilho
+            Behavior on color { ColorAnimation { duration: Tema.rapido } }
+            Rectangle {
+                width: 14; height: 14; radius: 7
+                anchors.verticalCenter: parent.verticalCenter
+                x: linha.ligado ? parent.width - width - 3 : 3
+                color: linha.ligado ? Tema.fundo : Tema.texto3
+                Behavior on x { NumberAnimation { duration: Tema.medio; easing.type: Easing.BezierSpline; easing.bezierCurve: Tema.curva } }
+            }
+            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: linha.alternado() }
         }
     }
 }

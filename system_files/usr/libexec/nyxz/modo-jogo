@@ -1,0 +1,142 @@
+#!/usr/bin/python3 -I
+"""Modo jogo (ideia 5): ao abrir um jogo, deixa o PC pronto para jogar; ao fechar, volta tudo.
+
+  modo-jogo ligar [appid]     chamado pelo nyxz-scoped quando um jogo da Steam abre (ou à mão)
+  modo-jogo desligar          chamado quando o jogo fecha (ou à mão)
+  modo-jogo estado            JSON: ativo, jogo, o que foi feito
+
+O que faz (cada item pode ser desligado em ~/.config/nyxz/modo-jogo.json):
+  perfilSom     aplica o perfil de som com esse nome (nyxz-audio), se existir
+  naoPerturbe   guarda as notificações até o jogo fechar
+  desempenho    processador no perfil de desempenho (power-profiles-daemon)
+  adiarAtualizacoes  o download de atualizações espera o jogo fechar
+  pausarBancos  para os bancos do Dev Hub ligados e liga de novo depois
+  replay        liga o replay instantâneo junto com o jogo
+O estado de antes fica em $XDG_RUNTIME_DIR/nyxz-modo-jogo.json (some ao desligar o PC).
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+CONFIG = Path.home() / ".config/nyxz/modo-jogo.json"
+ESTADO = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "nyxz-modo-jogo.json"
+PADRAO = {"perfilSom": "Jogo", "naoPerturbe": True, "desempenho": True,
+          "adiarAtualizacoes": True, "pausarBancos": False, "replay": False}
+PPD = ["net.hadess.PowerProfiles", "/net/hadess/PowerProfiles"]
+
+
+def rodar(cmd):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        return r.returncode, r.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+
+
+def config():
+    try:
+        return {**PADRAO, **json.loads(CONFIG.read_text(encoding="utf-8"))}
+    except (OSError, ValueError):
+        return dict(PADRAO)
+
+
+def perfil_energia():
+    codigo, saida = rodar(["busctl", "get-property", *PPD, "net.hadess.PowerProfiles", "ActiveProfile"])
+    # saída: s "balanced"
+    return saida.split('"')[1] if codigo == 0 and '"' in saida else ""
+
+
+def definir_perfil_energia(nome):
+    rodar(["busctl", "set-property", *PPD, "net.hadess.PowerProfiles", "ActiveProfile", "s", nome])
+
+
+def notificar(titulo, corpo):
+    rodar(["notify-send", "-a", "Nyxz", "-i", "input-gaming", titulo, corpo])
+
+
+def ligar(appid=""):
+    if ESTADO.exists():
+        return 0   # já está ativo
+    cfg = config()
+    feito = {"jogo": appid, "cfg": cfg}
+
+    if cfg["perfilSom"]:
+        _, saida = rodar(["/usr/libexec/nyxz/nyxz-audio", "estado"])
+        try:
+            perfis = json.loads(saida).get("perfis", [])
+        except ValueError:
+            perfis = []
+        if cfg["perfilSom"] in perfis:
+            rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "salvar", "_antes-do-jogo"])
+            rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "aplicar", cfg["perfilSom"]])
+            feito["som"] = True
+
+    if cfg["naoPerturbe"]:
+        rodar(["qs", "-c", "nyxz", "ipc", "call", "notificacoes", "jogo", "true"])
+        feito["naoPerturbe"] = True
+
+    if cfg["desempenho"]:
+        antes = perfil_energia()
+        if antes and antes != "performance":
+            definir_perfil_energia("performance")
+            if perfil_energia() == "performance":
+                feito["energiaAntes"] = antes
+
+    if cfg["pausarBancos"]:
+        _, saida = rodar(["podman", "ps", "--filter", "label=nyxz.banco", "--format", "{{.Names}}"])
+        ligados = saida.split()
+        for nome in ligados:
+            rodar(["podman", "stop", "-t", "10", nome])
+        feito["bancos"] = ligados
+
+    if cfg["replay"] and rodar(["/usr/libexec/nyxz/replay", "estado"])[0] != 0:
+        rodar(["/usr/libexec/nyxz/replay", "ligar"])
+        feito["replay"] = True
+
+    # adiarAtualizacoes: basta este arquivo existir (o nyxz-atualizar confere)
+    ESTADO.write_text(json.dumps(feito), encoding="utf-8")
+    notificar("Modo jogo ligado", "Tudo volta ao normal quando o jogo fechar.")
+    return 0
+
+
+def desligar():
+    try:
+        feito = json.loads(ESTADO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if feito.get("som"):
+        rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "aplicar", "_antes-do-jogo"])
+        rodar(["/usr/libexec/nyxz/nyxz-audio", "perfil", "remover", "_antes-do-jogo"])
+    if feito.get("naoPerturbe"):
+        rodar(["qs", "-c", "nyxz", "ipc", "call", "notificacoes", "jogo", "false"])
+    if feito.get("energiaAntes"):
+        definir_perfil_energia(feito["energiaAntes"])
+    for nome in feito.get("bancos", []):
+        rodar(["podman", "start", nome])
+    if feito.get("replay"):
+        rodar(["/usr/libexec/nyxz/replay", "desligar"])
+    ESTADO.unlink(missing_ok=True)
+    return 0
+
+
+def estado():
+    try:
+        feito = json.loads(ESTADO.read_text(encoding="utf-8"))
+        print(json.dumps({"ativo": True, **feito}))
+    except (OSError, ValueError):
+        print(json.dumps({"ativo": False, "cfg": config()}))
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if a[:1] == ["ligar"]:
+        sys.exit(ligar(a[1] if len(a) > 1 else ""))
+    elif a[:1] == ["desligar"]:
+        sys.exit(desligar())
+    elif a[:1] == ["estado"]:
+        estado()
+    else:
+        print(__doc__)
+        sys.exit(2)

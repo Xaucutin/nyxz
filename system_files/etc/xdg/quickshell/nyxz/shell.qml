@@ -51,6 +51,13 @@ ShellRoot {
         }
     }
 
+    // Não perturbe: qs -c nyxz ipc call notificacoes alternar | jogo true/false
+    IpcHandler {
+        target: "notificacoes"
+        function alternar(): void { Estado.naoPerturbeManual = !Estado.naoPerturbeManual; }
+        function jogo(ligar: bool): void { Estado.naoPerturbeJogo = ligar; }
+    }
+
     IpcHandler {
         target: "atalhos"
         function alternar(): void {
