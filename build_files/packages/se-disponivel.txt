@@ -59,3 +59,7 @@ nss-tools
 # Jogos: replay instantâneo (COPR brycensranch) e perfil de desempenho do processador
 gpu-screen-recorder
 power-profiles-daemon
+# Regras de acesso a controles (Xbox, PlayStation, Nintendo, 8BitDo) sem precisar da Steam
+steam-devices
+# Bluetooth (controles, fones e teclados sem fio); o serviço só roda se houver adaptador
+bluez

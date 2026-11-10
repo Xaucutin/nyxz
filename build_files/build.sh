@@ -190,6 +190,8 @@ systemctl enable greetd.service
 systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl enable nyxz-atualizar.timer nyxz-migracoes.service
+# Bluetooth: só acorda quando há adaptador (bluetooth.target)
+systemctl enable bluetooth.service 2>/dev/null || true
 # Servidor SSH desligado por padrão: num computador pessoal, a porta 22 aberta na rede
 # é risco à toa. Liga pelo Dev Hub → SSH quando precisar.
 systemctl disable sshd.service sshd.socket 2>/dev/null || true

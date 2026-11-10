@@ -196,13 +196,16 @@ def construir(ids, puxar="newer"):
     # Serviços que o app precisa (ex.: lactd do LACT), ligados dentro da imagem.
     servicos = sorted({s for i in itens for s in i.get("servicos", [])})
     liga_servicos = f"systemctl enable {' '.join(servicos)}; " if servicos else ""
+    # Ajustes que o pacote não faz sozinho (ex.: permissão de captura do Sunshine).
+    # Vêm só do catálogo da imagem (/usr/share, do root), nunca do usuário.
+    comandos = "".join(f"{c}; " for i in itens for c in i.get("comandos", []))
     PASTA_IMAGEM.mkdir(parents=True, exist_ok=True)
     (PASTA_IMAGEM / "Containerfile").write_text(
         "# Gerado por /usr/libexec/nyxz/componentes. Não edite: use Configurações → Apps e componentes.\n"
         f"FROM {imagem_base()}\n"
         f"RUN set -e; {liga} "
         f"dnf -y install --setopt=install_weak_deps=False {' '.join(pacotes)}; "
-        f"{liga_servicos}{desliga} dnf clean all; rm -rf /var/log/dnf5.log* /tmp/* /var/cache/*\n"
+        f"{liga_servicos}{comandos}{desliga} dnf clean all; rm -rf /var/log/dnf5.log* /tmp/* /var/cache/*\n"
         f'LABEL org.nyxz.componentes="{",".join(i["id"] for i in itens)}"\n',
         encoding="utf-8",
     )

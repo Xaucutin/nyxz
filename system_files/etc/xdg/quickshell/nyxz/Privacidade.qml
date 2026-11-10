@@ -18,7 +18,8 @@ Item {
     readonly property bool capturaTela: nos.some(n => !n.isStream && n.audio === null && (n.name || "").indexOf("xdph") === 0)
 
     readonly property bool microfone: gravandoAudio.length > 0
-    readonly property bool tela: capturaTela
+    // O Sunshine transmite a tela para outro aparelho: conta como captura de tela
+    readonly property bool tela: capturaTela || JogoEstado.streaming
     readonly property bool camera: gravandoVideo.length > 0 && !capturaTela
     readonly property bool ativo: microfone || camera || tela
 
@@ -35,6 +36,8 @@ Item {
         const bin = (p["application.process.binary"] || "").toLowerCase();
         if (app.indexOf("gpu-screen-recorder") >= 0 || bin.indexOf("gpu-screen-recorder") >= 0
                 || nome.indexOf("gsr") === 0) return true;
+        // O som do Sunshine (vai junto com a tela) já aparece como "tela"
+        if (app.indexOf("sunshine") >= 0 || bin.indexOf("sunshine") >= 0 || nome.indexOf("sink-sunshine") === 0) return true;
         return app.indexOf("quickshell") >= 0;
     }
     function nomeApp(n) {

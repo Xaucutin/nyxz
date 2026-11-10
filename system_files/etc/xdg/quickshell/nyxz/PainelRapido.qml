@@ -249,6 +249,29 @@ PanelWindow {
                 }
                 MouseArea { id: areaSalvar; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.salvarReplay() }
             }
+            // Streaming (Sunshine): só aparece para quem instalou
+            Linha {
+                visible: JogoEstado.temStreaming
+                titulo: "Jogar no celular ou na TV"
+                detalhe: JogoEstado.streaming ? "Ligado: abra o Moonlight no outro aparelho." : "Desligado: o PC não aceita conexões."
+                ligado: JogoEstado.streaming
+                onAlternado: JogoEstado.alternarStreaming()
+            }
+            Rectangle {
+                visible: JogoEstado.streaming
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                radius: 6
+                color: areaParear.containsMouse ? Tema.hover : Tema.elevado
+                border.width: 1
+                border.color: Tema.borda
+                Text {
+                    anchors.centerIn: parent
+                    text: "Parear um aparelho (PIN)"
+                    font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto
+                }
+                MouseArea { id: areaParear; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.parearStreaming() }
+            }
             Linha {
                 titulo: "Não perturbe"
                 detalhe: "Guarda as notificações e mostra depois."

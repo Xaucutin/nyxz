@@ -218,10 +218,10 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Modo jogo automático | `nyxz-scoped` detecta o jogo → `tuned-ppd`, `nyxz-audio`, não perturbe, LACT | 🟢 |
 | Replay instantâneo | `gpu-screen-recorder -r`, salvar com SIGUSR1, buffer em RAM | 🟢 |
 | Controle da GPU | LACT | 🟡 0 RPM |
-| Streaming (Sunshine) | Sunshine (COPR/Flatpak), só na interface da LAN | 🟡 |
+| Streaming (Sunshine) | Sunshine (COPR lizardbyte/stable) na imagem local, serviço `nyxz-streaming` só quando ligado; restringir à LAN virtual fica com o `nyxz-netd` | 🟡 |
 | LAN virtual | ZeroTier com controlador próprio + painel | 🟡 |
 | Biblioteca de jogos | Ler bibliotecas da Steam (VDF), Heroic, Prism, Sober e Bottles | 🟡 |
-| Central de controles | InputPlumber via D-Bus + interface própria | 🔴 |
+| Central de controles | Kernel direto (joydev, bateria no sysfs, bluetoothctl) + Configurações → Controles. InputPlumber não tem pacote no Fedora 44: remapear fica com o Steam Input e o input-remapper | 🟢 |
 | Macros e remapeamento | input-remapper + OpenRazer | 🟡 |
 
 ### Rede e comunicação

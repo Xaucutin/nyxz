@@ -1,0 +1,12 @@
+[Unit]
+Description=Nyxz: streaming para celular ou TV (Sunshine)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# O arquivo marca "transmitindo" para a barra e o indicador de privacidade; some ao parar.
+ExecStartPre=/usr/bin/touch %t/nyxz-streaming-ativo
+ExecStart=/usr/bin/sunshine
+ExecStopPost=/usr/bin/rm -f %t/nyxz-streaming-ativo
+Restart=on-failure
+RestartSec=3

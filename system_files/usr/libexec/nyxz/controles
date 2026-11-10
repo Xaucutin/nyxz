@@ -1,0 +1,221 @@
+#!/usr/bin/python3 -I
+# Central de controles da Nyxz (ideia 34): sem serviço próprio, lê o que o kernel já mostra.
+#
+#   controles listar              JSON: controles ligados (tipo, conexão, bateria)
+#   controles testar <jsN>        uma linha JSON por mudança: {"botoes": [...], "eixos": [...]}
+#   controles procurar [seg]      procura controles por Bluetooth (JSON no fim)
+#   controles parear <MAC>        pareia, confia e conecta um controle Bluetooth
+#   controles esquecer <MAC>      remove o pareamento
+#
+# Fedora 44 já traz os drivers de Xbox (xpad), PlayStation (hid-playstation), Nintendo
+# (hid-nintendo) e genéricos; as regras do pacote steam-devices dão acesso sem senha.
+import json
+import os
+import re
+import select
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+INPUT = Path("/sys/class/input")
+ENERGIA = Path("/sys/class/power_supply")
+HID = re.compile(r"^[0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{4}\.[0-9A-F]{4}$")
+MAC = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
+
+FABRICANTES = {
+    "045e": "xbox", "054c": "playstation", "057e": "nintendo",
+    "2dc8": "8bitdo", "28de": "steam", "046d": "logitech",
+}
+# Nomes dos botões e eixos na ordem que os drivers do kernel entregam (joydev)
+NOMES = {
+    "xbox": (["A", "B", "X", "Y", "LB", "RB", "View", "Menu", "Xbox", "LS", "RS"],
+             ["LX", "LY", "LT", "RX", "RY", "RT", "Cruz X", "Cruz Y"]),
+    "playstation": (["✕", "○", "△", "□", "L1", "R1", "L2", "R2", "Create", "Options", "PS", "L3", "R3", "Touchpad"],
+                    ["LX", "LY", "L2", "RX", "RY", "R2", "Cruz X", "Cruz Y"]),
+}
+
+
+def ler(p, padrao=""):
+    try:
+        return Path(p).read_text().strip()
+    except OSError:
+        return padrao
+
+
+def no_hid(caminho):
+    """Sobe na árvore do sysfs até o dispositivo HID (ex.: 0005:054C:0CE6.0003)."""
+    p = Path(os.path.realpath(caminho))
+    while p != p.parent:
+        if HID.match(p.name):
+            return str(p)
+        p = p.parent
+    return None
+
+
+def baterias():
+    saida = {}
+    if not ENERGIA.is_dir():
+        return saida
+    for ps in ENERGIA.iterdir():
+        if ler(ps / "scope") != "Device":
+            continue
+        hid = no_hid(ps / "device")
+        if not hid:
+            continue
+        cap = ler(ps / "capacity")
+        saida[hid] = {
+            "bateria": int(cap) if cap.isdigit() else None,
+            "nivel": ler(ps / "capacity_level"),
+            "carregando": ler(ps / "status") == "Charging",
+        }
+    return saida
+
+
+def e_controle(dev):
+    """Só conta quem tem botões de controle (BTN_JOYSTICK 0x120–0x12f, BTN_GAMEPAD
+    0x130–0x13e). Mesas digitalizadoras, o mouse da VM e alguns teclados também criam
+    /dev/input/js*, mas só têm botões de mouse."""
+    palavras = ler(dev / "capabilities/key").split()
+    if not palavras:
+        return False
+    try:
+        mapa = int("".join(w.zfill(16) for w in palavras), 16)
+    except ValueError:
+        return False
+    return any(mapa >> b & 1 for b in range(0x120, 0x13f))
+
+
+def listar():
+    bats = baterias()
+    controles = []
+    for js in sorted(INPUT.glob("js*"), key=lambda p: int(p.name[2:]) if p.name[2:].isdigit() else 0):
+        dev = js / "device"
+        if not e_controle(dev):
+            continue
+        nome = ler(dev / "name", js.name)
+        fab = ler(dev / "id/vendor").lower()
+        bus = ler(dev / "id/bustype")
+        tipo = FABRICANTES.get(fab, "generico")
+        c = {
+            "id": js.name, "nome": nome, "tipo": tipo,
+            "conexao": {"0003": "USB", "0005": "Bluetooth"}.get(bus, "Outra"),
+            "bateria": None, "nivel": "", "carregando": False,
+            "botoes": NOMES.get(tipo, ([], []))[0], "eixos": NOMES.get(tipo, ([], []))[1],
+        }
+        hid = no_hid(dev)
+        if hid and hid in bats:
+            c.update(bats[hid])
+        controles.append(c)
+    bt = Path("/sys/class/bluetooth")
+    print(json.dumps({"controles": controles,
+                      "bluetooth": bt.is_dir() and any(bt.iterdir())}, ensure_ascii=False))
+
+
+def testar(js):
+    if not re.fullmatch(r"js\d+", js):
+        sys.exit("Controle inválido.")
+    botoes, eixos = [], []
+    ultimo = 0.0
+    pendente = False
+    with open(f"/dev/input/{js}", "rb", buffering=0) as f:
+        while True:
+            # Sem evento novo em 50 ms: manda o estado que ficou para trás
+            if not select.select([f], [], [], 0.05)[0]:
+                if pendente:
+                    print(json.dumps({"botoes": botoes, "eixos": eixos}), flush=True)
+                    pendente = False
+                continue
+            dados = f.read(8)
+            if len(dados) < 8:
+                break
+            _, valor, tipo, num = struct.unpack("IhBB", dados)
+            tipo &= ~0x80  # 0x80 = estado inicial
+            if tipo == 1:
+                botoes += [0] * (num + 1 - len(botoes))
+                botoes[num] = valor
+            elif tipo == 2:
+                eixos += [0] * (num + 1 - len(eixos))
+                eixos[num] = valor
+            pendente = True
+            # No máximo 30 atualizações por segundo (os eixos mudam o tempo todo)
+            agora = time.monotonic()
+            if agora - ultimo >= 1 / 30 or tipo == 1:
+                print(json.dumps({"botoes": botoes, "eixos": eixos}), flush=True)
+                ultimo, pendente = agora, False
+
+
+def bluetoothctl(*args, tempo=30):
+    r = subprocess.run(["bluetoothctl", *args], capture_output=True, text=True, timeout=tempo)
+    return r.returncode, r.stdout
+
+
+def info_bt(mac):
+    _, s = bluetoothctl("info", mac, tempo=5)
+    d = {"mac": mac}
+    for linha in s.splitlines():
+        if ":" in linha:
+            k, v = linha.strip().split(":", 1)
+            d[k.strip()] = v.strip()
+    return {
+        "mac": mac, "nome": d.get("Name") or d.get("Alias") or mac,
+        "controle": d.get("Icon") == "input-gaming"
+                    or bool(re.search(r"(?i)controller|gamepad|xbox|dualsense|dualshock|wireless controller|pro controller|8bitdo", d.get("Name", ""))),
+        "pareado": d.get("Paired") == "yes", "conectado": d.get("Connected") == "yes",
+    }
+
+
+def procurar(segundos):
+    try:
+        bluetoothctl("power", "on", tempo=5)
+        # A busca roda pelo tempo pedido e depois para sozinha
+        bluetoothctl("--timeout", str(segundos), "scan", "on", tempo=segundos + 10)
+        _, s = bluetoothctl("devices", tempo=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        print(json.dumps({"erro": "Bluetooth indisponível neste computador."}, ensure_ascii=False))
+        return
+    macs = [l.split()[1] for l in s.splitlines() if l.startswith("Device ") and len(l.split()) > 1]
+    disp = [info_bt(m) for m in macs if MAC.match(m)]
+    # Controles primeiro; o resto aparece depois (alguns controles não se identificam)
+    disp.sort(key=lambda d: (not d["controle"], d["nome"].lower()))
+    print(json.dumps({"dispositivos": disp}, ensure_ascii=False))
+
+
+def parear(mac):
+    if not MAC.match(mac):
+        sys.exit("Endereço inválido.")
+    codigo, s = bluetoothctl("pair", mac, tempo=40)
+    if codigo != 0 and "AlreadyExists" not in s:
+        sys.exit("Não deu para parear: deixe o controle no modo de pareamento e tente de novo.")
+    bluetoothctl("trust", mac, tempo=10)   # reconecta sozinho da próxima vez
+    codigo, _ = bluetoothctl("connect", mac, tempo=20)
+    if codigo != 0:
+        sys.exit("Pareado, mas não conectou: aperte o botão central do controle.")
+    print("ok")
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "listar":
+        listar()
+    elif a[0] == "testar" and len(a) == 2:
+        try:
+            testar(a[1])
+        except (BrokenPipeError, KeyboardInterrupt):
+            # Quem lia parou (a página fechou o teste): sai em silêncio
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError as e:
+            sys.exit(f"O controle desconectou ou não pode ser lido: {e}")
+    elif a[0] == "procurar":
+        procurar(int(a[1]) if len(a) > 1 and a[1].isdigit() else 15)
+    elif a[0] == "parear" and len(a) == 2:
+        parear(a[1].upper())
+    elif a[0] == "esquecer" and len(a) == 2 and MAC.match(a[1].upper()):
+        bluetoothctl("remove", a[1].upper(), tempo=10)
+    else:
+        sys.exit("uso: controles listar|testar <jsN>|procurar [seg]|parear <MAC>|esquecer <MAC>")
+
+
+if __name__ == "__main__":
+    main()

@@ -14,7 +14,7 @@
     {
       "id": "jogos",
       "nome": "Jogos",
-      "descricao": "Steam, Minecraft, Roblox e ferramentas de desempenho."
+      "descricao": "Steam, Minecraft, Roblox, ferramentas de desempenho, streaming e periféricos."
     },
     {
       "id": "comunicacao",
@@ -25,7 +25,8 @@
   "repositorios": {
     "vscode": "nyxz-vscode.repo",
     "ghostty": "_copr_scottames-ghostty.repo",
-    "lact": "_copr_ilyaz-LACT.repo"
+    "lact": "_copr_ilyaz-LACT.repo",
+    "sunshine": "_copr_lizardbyte-stable.repo"
   },
   "itens": [
     {
@@ -249,6 +250,51 @@
       ],
       "padrao": false,
       "tamanho_mb": 40
+    },
+    {
+      "id": "sunshine",
+      "categoria": "jogos",
+      "nome": "Sunshine (jogar no celular ou na TV)",
+      "descricao": "Transmite os jogos do PC para o Moonlight no celular, tablet ou TV. Só fica ligado quando você liga no painel rápido.",
+      "tipo": "rpm",
+      "pacotes": [
+        "Sunshine"
+      ],
+      "repos": [
+        "sunshine"
+      ],
+      "comandos": [
+        "setcap cap_sys_admin+p \"$(readlink -f /usr/bin/sunshine)\""
+      ],
+      "padrao": false,
+      "tamanho_mb": 60
+    },
+    {
+      "id": "macros",
+      "categoria": "jogos",
+      "nome": "Macros e remapeamento (input-remapper)",
+      "descricao": "Troca a função de teclas e botões do mouse, cria macros e perfis por dispositivo.",
+      "tipo": "rpm",
+      "pacotes": [
+        "input-remapper"
+      ],
+      "servicos": [
+        "input-remapper.service"
+      ],
+      "padrao": false,
+      "tamanho_mb": 15
+    },
+    {
+      "id": "openrgb",
+      "categoria": "jogos",
+      "nome": "OpenRGB (luzes RGB)",
+      "descricao": "Controla as luzes de teclados (Razer e outros), mouses, placa-mãe e memórias num app só.",
+      "tipo": "rpm",
+      "pacotes": [
+        "openrgb"
+      ],
+      "padrao": false,
+      "tamanho_mb": 20
     },
     {
       "id": "prism",

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Controles
+GenericName=Central de controles
+Comment=Bateria, teste de botões e pareamento de controles de Xbox, PlayStation e outros
+Exec=/usr/libexec/nyxz/configuracoes controles
+Icon=input-gaming
+Categories=Settings;Game;
+Keywords=controle;controles;gamepad;joystick;xbox;playstation;dualsense;dualshock;nintendo;8bitdo;bluetooth;parear;bateria;drift;

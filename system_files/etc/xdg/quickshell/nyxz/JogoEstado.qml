@@ -7,10 +7,13 @@ import Quickshell.Io
 // Os scripts marcam isso com arquivos na pasta temporária da sessão:
 //   $XDG_RUNTIME_DIR/nyxz-modo-jogo.json   (modo-jogo)
 //   $XDG_RUNTIME_DIR/nyxz-replay-ativo     (serviço nyxz-replay)
+//   $XDG_RUNTIME_DIR/nyxz-streaming-ativo  (serviço nyxz-streaming, Sunshine)
 Singleton {
     readonly property string pasta: Quickshell.env("XDG_RUNTIME_DIR")
     property bool modoJogo: false
     property bool replay: false
+    property bool streaming: false
+    property bool temStreaming: false   // Sunshine instalado (Apps e componentes)
 
     FileView {
         id: jogo
@@ -24,15 +27,28 @@ Singleton {
         onLoaded: replay = true
         onLoadFailed: replay = false
     }
+    FileView {
+        id: transmitindo
+        printErrors: false
+        onLoaded: streaming = true
+        onLoadFailed: streaming = false
+    }
+    Process {
+        id: confereSunshine
+        command: ["test", "-x", "/usr/bin/sunshine"]
+        running: true
+        onExited: codigo => temStreaming = codigo === 0
+    }
     Component.onCompleted: {
         jogo.path = pasta + "/nyxz-modo-jogo.json";
         gravando.path = pasta + "/nyxz-replay-ativo";
+        transmitindo.path = pasta + "/nyxz-streaming-ativo";
     }
     Timer {
         interval: 2000
         running: true
         repeat: true
-        onTriggered: { jogo.reload(); gravando.reload(); }
+        onTriggered: { jogo.reload(); gravando.reload(); transmitindo.reload(); }
     }
 
     function alternarModoJogo() {
@@ -42,6 +58,13 @@ Singleton {
     function alternarReplay() {
         Quickshell.execDetached(["/usr/libexec/nyxz/replay", replay ? "desligar" : "ligar"]);
         replay = !replay;
+    }
+    function alternarStreaming() {
+        Quickshell.execDetached(["/usr/libexec/nyxz/streaming", streaming ? "desligar" : "ligar"]);
+        streaming = !streaming;
+    }
+    function parearStreaming() {
+        Quickshell.execDetached(["/usr/libexec/nyxz/streaming", "parear"]);
     }
     function salvarReplay() {
         Quickshell.execDetached(["/usr/libexec/nyxz/replay", "salvar"]);

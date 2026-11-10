@@ -1,0 +1,48 @@
+#!/usr/bin/bash
+# Streaming para celular ou TV (ideia 17): Sunshine no PC + Moonlight no outro aparelho.
+#   streaming ligar | desligar | alternar | estado | parear
+# Só roda enquanto ligado (serviço do usuário nyxz-streaming); nada fica escutando
+# na rede com ele desligado.
+set -u
+UNIDADE=nyxz-streaming.service
+CONF="$HOME/.config/sunshine/sunshine.conf"
+
+instalado() { command -v sunshine >/dev/null; }
+
+case "${1:-estado}" in
+  ligar)
+    instalado || { notify-send -a Nyxz -i video-display "Streaming indisponível" "Instale o Sunshine em Configurações → Apps e componentes."; exit 1; }
+    # Primeira vez: a página de configuração do Sunshine só abre neste PC (não na rede)
+    if [ ! -f "$CONF" ]; then
+      mkdir -p "$(dirname "$CONF")"
+      printf '%s\n' "# Criado pela Nyxz. A página de configuração só abre neste PC." \
+        "origin_web_ui_allowed = pc" > "$CONF"
+    fi
+    systemctl --user start "$UNIDADE"
+    ;;
+  desligar)
+    systemctl --user stop "$UNIDADE"
+    systemctl --user reset-failed "$UNIDADE" 2>/dev/null || true
+    ;;
+  alternar)
+    if systemctl --user is-active --quiet "$UNIDADE"; then "$0" desligar; else "$0" ligar; fi
+    ;;
+  estado)
+    if instalado; then i=true; else i=false; fi
+    if systemctl --user is-active --quiet "$UNIDADE"; then l=true; else l=false; fi
+    printf '{"instalado": %s, "ligado": %s}\n' "$i" "$l"
+    ;;
+  parear)
+    # O Moonlight mostra um PIN de 4 dígitos; ele é digitado nesta página. Na primeira
+    # vez, o Sunshine pede para criar um usuário e uma senha.
+    systemctl --user is-active --quiet "$UNIDADE" || "$0" ligar
+    sleep 1
+    xdg-open "https://localhost:47990/pin" >/dev/null 2>&1 &
+    notify-send -a Nyxz -i video-display "Parear com o Moonlight" \
+      "Digite na página o PIN que aparece no Moonlight. O navegador vai avisar do certificado: é deste PC, pode continuar."
+    ;;
+  *)
+    echo "uso: streaming ligar|desligar|alternar|estado|parear" >&2
+    exit 2
+    ;;
+esac

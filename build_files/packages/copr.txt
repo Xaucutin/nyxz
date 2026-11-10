@@ -6,3 +6,4 @@ errornointernet/quickshell
 scottames/ghostty
 brycensranch/gpu-screen-recorder-git
 ilyaz/LACT
+lizardbyte/stable
