@@ -1,0 +1,313 @@
+#!/usr/bin/python3 -I
+"""nyxz-stats: coletor das Estatísticas por app (serviço do usuário, primeira versão).
+
+A cada 30 s lê o que o kernel já conta por escopo de app (cgroups v2): tempo de CPU,
+RAM atual e pico, bytes lidos e escritos em disco. O tempo em foco vem dos eventos de
+janela ativa do Hyprland. Energia: placa de vídeo AMD (sensor do driver) e processador
+(RAPL, se liberado em Estatísticas → Energia), mais uma estimativa do resto do PC.
+
+Grava um arquivo por dia em ~/.local/share/nyxz/stats/AAAA-MM-DD.json a cada 5 min e ao
+sair (poupa o SSD). Não guarda títulos de janela nem nomes de arquivo: só o nome do app.
+Config em ~/.config/nyxz/stats.json (ligado, pausado até, apps excluídos).
+"""
+import datetime
+import glob
+import json
+import os
+import re
+import signal
+import socket
+import threading
+import time
+from pathlib import Path
+
+PASTA = Path.home() / ".local/share/nyxz/stats"
+CONFIG = Path.home() / ".config/nyxz/stats.json"
+INTERVALO = 30
+GRAVAR_CADA = 300
+RESTO_DO_PC_W = 25          # placa-mãe, RAM, SSD, ventoinhas (estimativa)
+EFICIENCIA_FONTE = 0.87
+
+
+def ler(p, padrao=""):
+    try:
+        return Path(p).read_text()
+    except OSError:
+        return padrao
+
+
+def nome_do_escopo(unidade):
+    """app-Hyprland-steam-1a2b3c.scope → steam; app-steam-jogo-570.scope → steam-jogo:570."""
+    s = unidade.encode().decode("unicode_escape") if "\\x" in unidade else unidade
+    s = re.sub(r"^app-|\.scope$", "", s)
+    m = re.match(r"^steam-jogo-(\d+)$", s)
+    if m:
+        return "steam-jogo:" + m.group(1)
+    for prefixo in ("Hyprland-", "graphical-", "hyprland-"):
+        if s.startswith(prefixo):
+            s = s[len(prefixo):]
+    s = s.split("@")[0]
+    antes, _, fim = s.rpartition("-")
+    if antes and re.fullmatch(r"[0-9a-fA-F]+", fim):
+        s = antes
+    return s.removesuffix(".desktop")
+
+
+def raiz_usuario():
+    for linha in ler("/proc/self/cgroup").splitlines():
+        if linha.startswith("0::"):
+            m = re.match(r"(/user\.slice/user-\d+\.slice/user@\d+\.service)", linha[3:])
+            if m:
+                return "/sys/fs/cgroup" + m.group(1)
+    return None
+
+
+def escopos(raiz):
+    """Escopos de app em qualquer fatia (app.slice, app-graphical.slice, nyxz.slice/…)."""
+    saida = []
+    for padrao in ("*/app-*.scope", "*/*/app-*.scope", "*/*/*/app-*.scope"):
+        saida += glob.glob(f"{raiz}/{padrao}")
+    return saida
+
+
+def contadores(pasta):
+    cpu = re.search(r"^usage_usec (\d+)", ler(f"{pasta}/cpu.stat"), re.M)
+    lido = escrito = 0
+    for linha in ler(f"{pasta}/io.stat").splitlines():
+        r = re.search(r"rbytes=(\d+)", linha)
+        w = re.search(r"wbytes=(\d+)", linha)
+        lido += int(r.group(1)) if r else 0
+        escrito += int(w.group(1)) if w else 0
+    stat = ler(f"{pasta}/memory.stat")
+    anon = re.search(r"^anon (\d+)", stat, re.M)
+    shmem = re.search(r"^shmem (\d+)", stat, re.M)
+    ram = (int(anon.group(1)) if anon else 0) + (int(shmem.group(1)) if shmem else 0)
+    return {"cpu_us": int(cpu.group(1)) if cpu else 0, "lido": lido, "escrito": escrito, "ram": ram,
+            "pico": int(ler(f"{pasta}/memory.peak", "0").strip() or 0)}
+
+
+# ---------------------------------------------------------------- energia
+def achar_sensores():
+    gpu = None
+    for h in glob.glob("/sys/class/hwmon/hwmon*"):
+        if ler(f"{h}/name").strip() == "amdgpu":
+            for nome in ("power1_average", "power1_input"):
+                if os.access(f"{h}/{nome}", os.R_OK):
+                    gpu = f"{h}/{nome}"
+                    break
+    rapl = "/sys/class/powercap/intel-rapl:0/energy_uj"
+    return gpu, (rapl if os.access(rapl, os.R_OK) else None)
+
+
+# ---------------------------------------------------------------- foco (eventos do Hyprland)
+class Foco:
+    def __init__(self):
+        self.app = None
+        self.trava = threading.Lock()
+        threading.Thread(target=self.ouvir, daemon=True).start()
+
+    def pasta_hypr(self):
+        rt = os.environ.get("XDG_RUNTIME_DIR", "")
+        sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+        if sig:
+            return f"{rt}/hypr/{sig}"
+        pastas = sorted(glob.glob(f"{rt}/hypr/*/.socket2.sock"), key=os.path.getmtime)
+        return os.path.dirname(pastas[-1]) if pastas else None
+
+    def pedir(self, pasta, comando):
+        with socket.socket(socket.AF_UNIX) as s:
+            s.settimeout(2)
+            s.connect(f"{pasta}/.socket.sock")
+            s.sendall(comando.encode())
+            dados = b""
+            while True:
+                bloco = s.recv(65536)
+                if not bloco:
+                    break
+                dados += bloco
+        return dados.decode(errors="replace")
+
+    def app_do_pid(self, pid):
+        for linha in ler(f"/proc/{pid}/cgroup").splitlines():
+            if linha.startswith("0::"):
+                escopo = [p for p in linha[3:].split("/") if p.endswith(".scope") and p.startswith("app-")]
+                return nome_do_escopo(escopo[-1]) if escopo else None
+        return None
+
+    def atualizar(self, pasta):
+        try:
+            janela = json.loads(self.pedir(pasta, "j/activewindow") or "{}")
+            app = self.app_do_pid(janela.get("pid", 0)) if janela.get("pid") else None
+        except (OSError, ValueError):
+            app = None
+        with self.trava:
+            self.app = app
+
+    def ouvir(self):
+        while True:
+            pasta = self.pasta_hypr()
+            if not pasta:
+                time.sleep(10)
+                continue
+            try:
+                self.atualizar(pasta)
+                with socket.socket(socket.AF_UNIX) as s:
+                    s.connect(f"{pasta}/.socket2.sock")
+                    resto = b""
+                    while True:
+                        bloco = s.recv(4096)
+                        if not bloco:
+                            break
+                        resto += bloco
+                        *linhas, resto = resto.split(b"\n")
+                        if any(l.startswith((b"activewindowv2>>", b"closewindow>>")) for l in linhas):
+                            self.atualizar(pasta)
+            except OSError:
+                pass
+            time.sleep(3)
+
+    def atual(self):
+        with self.trava:
+            return self.app
+
+
+# ---------------------------------------------------------------- dia
+class Dia:
+    def __init__(self):
+        self.data = datetime.date.today().isoformat()
+        self.dados = self.carregar(self.data)
+
+    @staticmethod
+    def carregar(data):
+        try:
+            return json.loads((PASTA / f"{data}.json").read_text())
+        except (OSError, ValueError):
+            return {"versao": 1, "apps": {}, "energia": {"cpu_wh": 0, "gpu_wh": 0, "pc_wh": 0, "medido_cpu": False, "medido_gpu": False}}
+
+    def app(self, nome):
+        return self.dados["apps"].setdefault(nome, {
+            "aberto_s": 0, "foco_s": 0, "cpu_s": 0.0, "lido": 0, "escrito": 0,
+            "ram_pico": 0, "ram_soma": 0, "ram_amostras": 0, "energia_wh": 0.0, "horas_foco": [0] * 24})
+
+    def gravar(self):
+        PASTA.mkdir(parents=True, exist_ok=True)
+        tmp = PASTA / f".{self.data}.tmp"
+        tmp.write_text(json.dumps(self.dados, separators=(",", ":")))
+        tmp.replace(PASTA / f"{self.data}.json")
+
+
+def config():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def main():
+    raiz = raiz_usuario()
+    if not raiz:
+        print("nyxz-stats: não achei a raiz do cgroup do usuário", flush=True)
+        return
+    foco = Foco()
+    dia = Dia()
+    anteriores = {}            # caminho do escopo → contadores da leitura anterior
+    gpu, rapl = achar_sensores()
+    rapl_antes = None
+    ultima_gravacao = time.monotonic()
+    parar = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: parar.set())
+    signal.signal(signal.SIGINT, lambda *_: parar.set())
+    print(f"nyxz-stats: pronto (GPU: {'sim' if gpu else 'não'}, processador: {'sim' if rapl else 'não'})", flush=True)
+
+    while not parar.wait(INTERVALO):
+        cfg = config()
+        hoje = datetime.date.today().isoformat()
+        if hoje != dia.data:
+            dia.gravar()
+            dia = Dia()
+        if cfg.get("ligado") is False or cfg.get("pausado_ate", 0) > time.time():
+            anteriores.clear()
+            continue
+        excluidos = set(cfg.get("excluidos", []))
+
+        # Escopos vivos agora, agrupados por app
+        vivos, por_app = {}, {}
+        for pasta in escopos(raiz):
+            nome = nome_do_escopo(os.path.basename(pasta))
+            if nome in excluidos:
+                continue
+            c = contadores(pasta)
+            vivos[pasta] = c
+            por_app.setdefault(nome, []).append((pasta, c))
+        cpu_total = 0.0
+        deltas = {}
+        for nome, lista in por_app.items():
+            a = dia.app(nome)
+            a["aberto_s"] += INTERVALO
+            ram = 0
+            for pasta, c in lista:
+                antes = anteriores.get(pasta)
+                if antes:      # só soma a diferença desde a última leitura do mesmo escopo
+                    dcpu = max(0, c["cpu_us"] - antes["cpu_us"]) / 1e6
+                    a["cpu_s"] += dcpu
+                    a["lido"] += max(0, c["lido"] - antes["lido"])
+                    a["escrito"] += max(0, c["escrito"] - antes["escrito"])
+                    deltas[nome] = deltas.get(nome, 0) + dcpu
+                    cpu_total += dcpu
+                ram += c["ram"]
+                a["ram_pico"] = max(a["ram_pico"], c["pico"], c["ram"])
+            a["ram_soma"] += ram
+            a["ram_amostras"] += 1
+        anteriores = vivos
+
+        app_foco = foco.atual()
+        if app_foco and app_foco not in excluidos and app_foco in por_app:
+            a = dia.app(app_foco)
+            a["foco_s"] += INTERVALO
+            a["horas_foco"][datetime.datetime.now().hour] += INTERVALO
+
+        # Energia deste intervalo (Wh)
+        e = dia.dados["energia"]
+        cpu_wh = gpu_wh = 0.0
+        if rapl:
+            try:
+                agora = int(ler(rapl, "0").strip() or 0)
+                if rapl_antes is not None and agora >= rapl_antes:
+                    cpu_wh = (agora - rapl_antes) / 1e6 / 3600
+                rapl_antes = agora
+                e["medido_cpu"] = True
+            except ValueError:
+                pass
+        else:
+            gpu_novo, rapl = achar_sensores()      # pode ter sido liberado agora
+        if gpu:
+            try:
+                gpu_wh = int(ler(gpu, "0").strip() or 0) / 1e6 * INTERVALO / 3600
+                e["medido_gpu"] = True
+            except ValueError:
+                pass
+        if not rapl:
+            # Sem RAPL: estimativa pelo uso de CPU (65 W de TDP do Ryzen 5 5600GT como teto)
+            ncpu = os.cpu_count() or 1
+            cpu_wh = (10 + 55 * min(1, cpu_total / (INTERVALO * ncpu))) * INTERVALO / 3600
+        pc_wh = (cpu_wh + gpu_wh) / EFICIENCIA_FONTE + RESTO_DO_PC_W * INTERVALO / 3600
+        e["cpu_wh"] += cpu_wh
+        e["gpu_wh"] += gpu_wh
+        e["pc_wh"] += pc_wh
+        # Por app: a parte do processador pelo tempo de CPU; a da placa de vídeo vai para o
+        # app em foco (normalmente o jogo)
+        for nome, d in deltas.items():
+            if cpu_total > 0:
+                dia.app(nome)["energia_wh"] += cpu_wh / EFICIENCIA_FONTE * d / cpu_total
+        if app_foco and app_foco in por_app:
+            dia.app(app_foco)["energia_wh"] += gpu_wh / EFICIENCIA_FONTE
+
+        if time.monotonic() - ultima_gravacao >= GRAVAR_CADA:
+            dia.gravar()
+            ultima_gravacao = time.monotonic()
+    dia.gravar()
+    print("nyxz-stats: gravado e desligado", flush=True)
+
+
+if __name__ == "__main__":
+    main()

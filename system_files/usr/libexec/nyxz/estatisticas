@@ -1,0 +1,220 @@
+#!/usr/bin/python3 -I
+# Estatísticas por app (Configurações → Estatísticas): junta os dias gravados pelo
+# nyxz-stats e cuida das escolhas de privacidade e da tarifa de energia.
+#
+#   estatisticas resumo hoje|semana|mes|ano|tudo    ranking dos apps + período anterior
+#   estatisticas app <app> semana|mes|ano|tudo      um app: por dia e por hora do dia
+#   estatisticas config                             JSON da configuração
+#   estatisticas ligar|desligar                     liga/desliga a coleta (o serviço)
+#   estatisticas pausar <minutos>|retomar
+#   estatisticas excluir|incluir <app>              tirar/voltar um app da contagem
+#   estatisticas apagar [app]                       apaga o histórico (de um app ou tudo)
+#   estatisticas exportar                           CSV em ~/Documentos (ou ~)
+#   estatisticas tarifa <R$/kWh> <bandeira>         verde|amarela|vermelha1|vermelha2
+#   estatisticas energia liberar|bloquear           sensor do processador (pkexec)
+import csv
+import datetime
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+PASTA = Path.home() / ".local/share/nyxz/stats"
+CONFIG = Path.home() / ".config/nyxz/stats.json"
+# Adicional das bandeiras tarifárias (R$/kWh, ANEEL 2025). Dá para ajustar a tarifa à mão.
+BANDEIRAS = {"verde": 0.0, "amarela": 0.01885, "vermelha1": 0.04463, "vermelha2": 0.07877}
+DIAS = {"hoje": 1, "semana": 7, "mes": 30, "ano": 365, "tudo": 100000}
+CAMPOS = ("aberto_s", "foco_s", "cpu_s", "lido", "escrito", "energia_wh")
+
+
+def ler_config():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def gravar_config(c):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(c, ensure_ascii=False, indent=2))
+
+
+def dias_do_periodo(n, deslocar=0):
+    hoje = datetime.date.today() - datetime.timedelta(days=n * deslocar)
+    if n >= 100000:
+        return None if deslocar == 0 else []
+    return [(hoje - datetime.timedelta(days=i)).isoformat() for i in range(n)]
+
+
+def carregar(dias):
+    """Dias gravados (dias=None: todos)."""
+    arquivos = sorted(PASTA.glob("????-??-??.json"))
+    saida = {}
+    for a in arquivos:
+        if dias is not None and a.stem not in dias:
+            continue
+        try:
+            saida[a.stem] = json.loads(a.read_text())
+        except (OSError, ValueError):
+            pass
+    return saida
+
+
+def somar(dias_dados):
+    apps, energia = {}, {"cpu_wh": 0.0, "gpu_wh": 0.0, "pc_wh": 0.0, "medido_cpu": False, "medido_gpu": False}
+    for d in dias_dados.values():
+        for nome, a in d.get("apps", {}).items():
+            t = apps.setdefault(nome, {**{k: 0 for k in CAMPOS}, "ram_pico": 0, "ram_soma": 0, "ram_amostras": 0})
+            for k in CAMPOS:
+                t[k] += a.get(k, 0)
+            t["ram_pico"] = max(t["ram_pico"], a.get("ram_pico", 0))
+            t["ram_soma"] += a.get("ram_soma", 0)
+            t["ram_amostras"] += a.get("ram_amostras", 0)
+        e = d.get("energia", {})
+        for k in ("cpu_wh", "gpu_wh", "pc_wh"):
+            energia[k] += e.get(k, 0)
+        energia["medido_cpu"] |= bool(e.get("medido_cpu"))
+        energia["medido_gpu"] |= bool(e.get("medido_gpu"))
+    for t in apps.values():
+        t["ram_media"] = t["ram_soma"] / t["ram_amostras"] if t["ram_amostras"] else 0
+        del t["ram_soma"], t["ram_amostras"]
+    return apps, energia
+
+
+def tarifa():
+    c = ler_config()
+    return float(c.get("tarifa", 0.85)) + BANDEIRAS.get(c.get("bandeira", "verde"), 0.0), c.get("bandeira", "verde")
+
+
+def nomes_de_jogos(chaves):
+    ids = [k.split(":", 1)[1] for k in chaves if k.startswith("steam-jogo:")]
+    if not ids:
+        return {}
+    try:
+        r = subprocess.run(["/usr/libexec/nyxz/jogos", "listar"], capture_output=True, text=True, timeout=10)
+        lista = json.loads(r.stdout).get("jogos", [])
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return {}
+    return {"steam-jogo:" + j["id"].split(":", 1)[1]: j["nome"] for j in lista if j["id"].startswith("steam:")}
+
+
+def resumo(periodo):
+    n = DIAS[periodo]
+    atual = carregar(dias_do_periodo(n))
+    anterior = carregar(dias_do_periodo(n, 1)) if n < 100000 else {}
+    apps, energia = somar(atual)
+    apps_ant, energia_ant = somar(anterior)
+    preco, bandeira = tarifa()
+    jogos = nomes_de_jogos(apps)
+    lista = []
+    for nome, t in apps.items():
+        lista.append({"id": nome, "jogo": nome.startswith("steam-jogo:"), "nome": jogos.get(nome, ""),
+                      **{k: round(v, 3) if isinstance(v, float) else v for k, v in t.items()},
+                      "custo": round(t["energia_wh"] / 1000 * preco, 2),
+                      "anterior": {k: apps_ant.get(nome, {}).get(k, 0) for k in ("foco_s", "aberto_s", "energia_wh")}})
+    lista.sort(key=lambda x: (-x["foco_s"], -x["aberto_s"]))
+    por_dia = [{"dia": d, "foco_s": sum(a.get("foco_s", 0) for a in v.get("apps", {}).values()),
+                "pc_wh": v.get("energia", {}).get("pc_wh", 0)} for d, v in sorted(atual.items())]
+    print(json.dumps({
+        "periodo": periodo, "dias_com_dados": len(atual), "apps": lista, "por_dia": por_dia[-60:],
+        "energia": {**{k: round(v, 2) if isinstance(v, float) else v for k, v in energia.items()},
+                    "custo": round(energia["pc_wh"] / 1000 * preco, 2),
+                    "custo_anterior": round(energia_ant["pc_wh"] / 1000 * preco, 2)},
+        "tarifa": preco, "bandeira": bandeira,
+        "foco_total": sum(a["foco_s"] for a in lista),
+        "foco_total_anterior": sum(a.get("foco_s", 0) for a in apps_ant.values()),
+    }, ensure_ascii=False))
+
+
+def detalhe(app, periodo):
+    dados = carregar(dias_do_periodo(DIAS[periodo]))
+    horas = [0] * 24
+    por_dia = []
+    for d, v in sorted(dados.items()):
+        a = v.get("apps", {}).get(app)
+        if not a:
+            continue
+        por_dia.append({"dia": d, "foco_s": a.get("foco_s", 0), "aberto_s": a.get("aberto_s", 0),
+                        "ram_pico": a.get("ram_pico", 0)})
+        horas = [x + y for x, y in zip(horas, a.get("horas_foco", [0] * 24))]
+    print(json.dumps({"app": app, "por_dia": por_dia, "horas": horas}))
+
+
+def servico(acao):
+    subprocess.run(["systemctl", "--user", acao, "--now", "nyxz-stats.service"], capture_output=True)
+
+
+def main():
+    a = sys.argv[1:]
+    c = ler_config()
+    if not a or (a[0] == "resumo" and len(a) <= 2):
+        resumo(a[1] if len(a) == 2 and a[1] in DIAS else "semana")
+    elif a[0] == "app" and len(a) == 3 and a[2] in DIAS:
+        detalhe(a[1], a[2])
+    elif a == ["config"]:
+        ativo = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "nyxz-stats.service"]).returncode == 0
+        import os
+        rapl = os.access("/sys/class/powercap/intel-rapl:0/energy_uj", os.R_OK)
+        tem_rapl = os.path.exists("/sys/class/powercap/intel-rapl:0/energy_uj")
+        print(json.dumps({"ligado": c.get("ligado", True) and ativo, "pausado_ate": c.get("pausado_ate", 0),
+                          "excluidos": c.get("excluidos", []), "tarifa": c.get("tarifa", 0.85),
+                          "bandeira": c.get("bandeira", "verde"), "rapl": rapl, "tem_rapl": tem_rapl},
+                         ensure_ascii=False))
+    elif a[0] in ("ligar", "desligar") and len(a) == 1:
+        c["ligado"] = a[0] == "ligar"
+        gravar_config(c)
+        servico("enable" if c["ligado"] else "disable")
+    elif a[0] == "pausar" and len(a) == 2 and a[1].isdigit():
+        c["pausado_ate"] = time.time() + int(a[1]) * 60
+        gravar_config(c)
+    elif a == ["retomar"]:
+        c["pausado_ate"] = 0
+        gravar_config(c)
+    elif a[0] in ("excluir", "incluir") and len(a) == 2:
+        ex = set(c.get("excluidos", []))
+        (ex.add if a[0] == "excluir" else ex.discard)(a[1])
+        c["excluidos"] = sorted(ex)
+        gravar_config(c)
+    elif a[0] == "apagar" and len(a) in (1, 2):
+        servico("stop")             # o coletor regrava o dia aberto ao sair
+        for arq in PASTA.glob("????-??-??.json"):
+            if len(a) == 1:
+                arq.unlink()
+            else:
+                d = json.loads(arq.read_text())
+                if d.get("apps", {}).pop(a[1], None) is not None:
+                    arq.write_text(json.dumps(d, separators=(",", ":")))
+        if c.get("ligado", True):
+            servico("start")
+    elif a == ["exportar"]:
+        destino_pasta = next((p for p in (Path.home() / "Documentos", Path.home() / "Documents") if p.is_dir()), Path.home())
+        destino = destino_pasta / f"estatisticas-nyxz-{datetime.date.today().isoformat()}.csv"
+        with open(destino, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["dia", "app", "aberto_min", "em_foco_min", "cpu_s", "disco_lido_mb", "disco_escrito_mb",
+                        "ram_pico_mb", "energia_wh"])
+            for d, v in sorted(carregar(None).items()):
+                for nome, t in sorted(v.get("apps", {}).items()):
+                    w.writerow([d, nome, round(t.get("aberto_s", 0) / 60), round(t.get("foco_s", 0) / 60),
+                                round(t.get("cpu_s", 0), 1), round(t.get("lido", 0) / 1e6, 1),
+                                round(t.get("escrito", 0) / 1e6, 1), round(t.get("ram_pico", 0) / 1e6),
+                                round(t.get("energia_wh", 0), 2)])
+        print(destino)
+    elif a[0] == "tarifa" and len(a) == 3 and a[2] in BANDEIRAS:
+        try:
+            valor = float(a[1].replace(",", "."))
+        except ValueError:
+            sys.exit("Tarifa inválida.")
+        c["tarifa"], c["bandeira"] = valor, a[2]
+        gravar_config(c)
+    elif a[0] == "energia" and len(a) == 2 and a[1] in ("liberar", "bloquear"):
+        r = subprocess.run(["pkexec", "/usr/libexec/nyxz/nyxz-discos-root", "energia", a[1]], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(r.stderr.strip() or "Não deu para mudar.")
+    else:
+        sys.exit("uso: estatisticas resumo|app|config|ligar|desligar|pausar|retomar|excluir|incluir|apagar|exportar|tarifa|energia")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Estatísticas
+GenericName=Uso por app
+Comment=Tempo em cada app e jogo, processador, disco, RAM e energia em reais
+Exec=/usr/libexec/nyxz/configuracoes estatisticas
+Icon=utilities-system-monitor
+Categories=System;Monitor;
+Keywords=estatisticas;stats;tempo;uso;horas;apps;jogos;energia;consumo;conta de luz;reais;kwh;tela;screen time;

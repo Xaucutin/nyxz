@@ -5,6 +5,8 @@
                                         e uma linha por disco por dia no histórico
                                         (timer a cada 30 min e no boot; também pela página)
   nyxz-discos-root teste curto|longo <disco>   pede ao disco o teste SMART dele
+  nyxz-discos-root energia liberar|bloquear     deixa (ou não) as Estatísticas lerem o
+                                        contador de energia do processador (RAPL)
 
 Pela página Discos roda com pkexec, sem senha na sessão ativa (ação org.nyxz.discos):
 só aceita estes comandos e discos que existem em /dev.
@@ -198,10 +200,32 @@ def verificar():
     gravar(HISTORICO, "\n".join(json.dumps(r) for r in registros[-5000:]) + "\n")
 
 
+# Contador de energia do processador (RAPL). O kernel deixa só o root ler desde 2020 por
+# causa do ataque PLATYPUS (estimar o que o processador faz pelo consumo). Num PC pessoal
+# o risco é pequeno; mesmo assim só é liberado se a pessoa pedir em Estatísticas → Energia.
+RAPL = "/sys/class/powercap/intel-rapl:0/energy_uj"
+TMPFILES = Path("/etc/tmpfiles.d/nyxz-energia.conf")
+
+
+def energia(liberar):
+    if liberar:
+        TMPFILES.write_text("# Gerado pela Nyxz (Estatísticas → Energia): leitura do consumo do processador\n"
+                            f"z {RAPL} 0444 - - -\n")
+        os.chmod(TMPFILES, 0o644)
+        if os.path.exists(RAPL):
+            os.chmod(RAPL, 0o444)
+    else:
+        TMPFILES.unlink(missing_ok=True)
+        if os.path.exists(RAPL):
+            os.chmod(RAPL, 0o400)
+
+
 def main():
     a = sys.argv[1:]
     if a == ["verificar"]:
         verificar()
+    elif len(a) == 2 and a[0] == "energia" and a[1] in ("liberar", "bloquear"):
+        energia(a[1] == "liberar")
     elif len(a) == 3 and a[0] == "teste" and a[1] in ("curto", "longo") and DISCO.match(a[2]) and os.path.exists(a[2]):
         tipo = {"curto": "short", "longo": "long"}[a[1]]
         r = subprocess.run(["smartctl", "-t", tipo, a[2]], capture_output=True, text=True)

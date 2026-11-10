@@ -1,0 +1,14 @@
+[Unit]
+Description=Nyxz: Estatísticas por app (coletor)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/libexec/nyxz/nyxz-stats
+Restart=on-failure
+RestartSec=10
+Nice=10
+MemoryMax=48M
+
+[Install]
+WantedBy=graphical-session.target

@@ -197,7 +197,7 @@ systemctl enable bluetooth.service 2>/dev/null || true
 # é risco à toa. Liga pelo Dev Hub → SSH quando precisar.
 systemctl disable sshd.service sshd.socket 2>/dev/null || true
 # Serviços de usuário da Nyxz: ligados para todos os usuários, sobem com a sessão gráfica.
-systemctl --global enable nyxz-scoped.service nyxz-discos-alerta.path
+systemctl --global enable nyxz-scoped.service nyxz-discos-alerta.path nyxz-stats.service
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
 # vêm pela imagem nova, não por dnf.
 sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/_copr_*.repo 2>/dev/null || true
