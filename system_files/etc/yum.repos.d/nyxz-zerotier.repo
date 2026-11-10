@@ -1,0 +1,8 @@
+# Repositório oficial do ZeroTier (LAN virtual). Desligado no sistema: só é usado quando
+# a "LAN virtual" é escolhida e entra na imagem local personalizada.
+[zerotier]
+name=ZeroTier
+baseurl=https://download.zerotier.com/redhat/fc/$releasever
+enabled=0
+gpgcheck=1
+gpgkey=https://download.zerotier.com/contact%40zerotier.com.gpg

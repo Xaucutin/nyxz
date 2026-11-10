@@ -10,6 +10,7 @@ ColumnLayout {
     property var validador: null
     property bool oculto: false
     readonly property bool aceito: !validador || validador.test(entrada.text)
+    signal confirmado()   // Enter no campo
     spacing: 4
     // Layout dentro de layout estica por padrão e ignora a largura pedida:
     // aqui só estica quem pedir (Layout.fillWidth: true na hora de usar).
@@ -36,6 +37,7 @@ ColumnLayout {
             selectByMouse: true
             activeFocusOnTab: true   // Tab passa de campo em campo
             echoMode: campo.oculto ? TextInput.Password : TextInput.Normal
+            onAccepted: campo.confirmado()
         }
     }
 }

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Redes de jogo
+GenericName=LAN virtual
+Comment=Jogue em LAN com amigos pela internet (estilo Radmin VPN, sobre o ZeroTier)
+Exec=/usr/libexec/nyxz/configuracoes lan
+Icon=network-workgroup
+Categories=Network;Game;
+Keywords=lan;radmin;hamachi;zerotier;rede;amigos;minecraft;jogar;multiplayer;vpn;

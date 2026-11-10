@@ -1,0 +1,222 @@
+#!/usr/bin/python3 -I
+# LAN virtual da Nyxz ("Redes de jogo", estilo Radmin) sobre o ZeroTier, com o
+# controlador embutido do próprio PC: sem conta, sem site e sem limite de pessoas.
+#
+#   lan estado                       JSON: serviço, redes salvas, membros e ping
+#   lan criar <nome>                 cria uma rede neste PC e entra nela
+#   lan entrar <código>              entra na rede de um amigo (código de 16 letras)
+#   lan ligar|desligar <id>          entra/sai sem esquecer a rede
+#   lan remover <id>                 sai e esquece (a sua é apagada)
+#   lan aprovar|bloquear <id> <membro>
+#   lan nomear <membro> <nome>       apelido de um membro (só neste PC)
+#
+# O serviço (zerotier-one, ~10–20 MB) só roda com alguma rede ligada. Quem cria a rede
+# precisa estar com o PC ligado para alguém NOVO entrar; quem já entrou continua.
+import json
+import os
+import random
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+API = "http://127.0.0.1:9993"
+TOKEN = Path.home() / ".zeroTierOneAuthToken"
+CONFIG = Path.home() / ".config/nyxz/lan.json"
+ROOT = "/usr/libexec/nyxz/nyxz-net-root"
+ID = re.compile(r"^[0-9a-f]{16}$")
+MEMBRO = re.compile(r"^[0-9a-f]{10}$")
+
+
+def ler_cfg():
+    try:
+        return json.loads(CONFIG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"redes": {}, "nomes": {}}
+
+
+def gravar_cfg(c):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG.with_suffix(".tmp")
+    tmp.write_text(json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(CONFIG)
+
+
+def instalado():
+    return Path("/usr/sbin/zerotier-one").exists() or Path("/usr/bin/zerotier-one").exists()
+
+
+def ativo():
+    return subprocess.run(["systemctl", "is-active", "--quiet", "zerotier-one.service"]).returncode == 0
+
+
+def api(caminho, metodo="GET", dados=None):
+    req = urllib.request.Request(API + caminho, method=metodo,
+                                 headers={"X-ZT1-Auth": TOKEN.read_text().strip()})
+    if dados is not None:
+        req.data = json.dumps(dados).encode()
+        req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=8) as r:
+        corpo = r.read()
+    return json.loads(corpo) if corpo else {}
+
+
+def root(*args):
+    r = subprocess.run(["pkexec", ROOT, *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(r.stderr.strip() or "Não foi possível ligar a LAN virtual.")
+
+
+def garantir_servico():
+    if not instalado():
+        sys.exit("A LAN virtual não está instalada. Instale em Configurações → Apps e componentes.")
+    if not ativo() or not TOKEN.exists():
+        root("lan", "ligar")
+    for _ in range(40):           # a API demora um pouco a responder no início
+        try:
+            return api("/status")
+        except (urllib.error.URLError, OSError, ValueError):
+            time.sleep(0.25)
+    sys.exit("O serviço da LAN virtual não respondeu.")
+
+
+def liberar_firewall():
+    # A interface zt* nasce alguns segundos depois de entrar na rede
+    for _ in range(20):
+        if any(n.startswith("zt") for n in os.listdir("/sys/class/net")):
+            root("lan", "firewall")
+            return
+        time.sleep(0.5)
+
+
+def desligar_se_vazio():
+    try:
+        if not api("/network"):
+            root("lan", "desligar")
+    except (urllib.error.URLError, OSError, ValueError):
+        pass
+
+
+# ---------------------------------------------------------------- comandos
+def estado():
+    c = ler_cfg()
+    saida = {"instalado": instalado(), "ligado": False, "endereco": "", "redes": []}
+    entradas, pares = {}, {}
+    if saida["instalado"] and ativo() and TOKEN.exists():
+        try:
+            saida["endereco"] = api("/status").get("address", "")
+            entradas = {n["id"]: n for n in api("/network")}
+            pares = {p["address"]: p for p in api("/peer")}
+            saida["ligado"] = True
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+    ids = list(c["redes"].keys()) + [i for i in entradas if i not in c["redes"]]
+    for nid in ids:
+        info = c["redes"].get(nid, {"nome": "", "minha": False})
+        n = entradas.get(nid)
+        rede = {
+            "id": nid, "nome": (n or {}).get("name") or info.get("nome") or nid,
+            "minha": info.get("minha", False), "ligada": n is not None,
+            "status": (n or {}).get("status", ""),
+            "ip": ", ".join(a.split("/")[0] for a in (n or {}).get("assignedAddresses", [])),
+            "membros": [],
+        }
+        if rede["minha"] and saida["ligado"]:
+            try:
+                for mid in api(f"/controller/network/{nid}/member"):
+                    m = api(f"/controller/network/{nid}/member/{mid}")
+                    p = pares.get(mid, {})
+                    online = mid == saida["endereco"] or any(x.get("active") for x in p.get("paths", []))
+                    rede["membros"].append({
+                        "id": mid, "nome": c["nomes"].get(mid, "Este PC" if mid == saida["endereco"] else ""),
+                        "autorizado": m.get("authorized", False),
+                        "ip": ", ".join(m.get("ipAssignments", [])),
+                        "online": online,
+                        "ping": p.get("latency", -1) if mid != saida["endereco"] else 0,
+                        "eu": mid == saida["endereco"],
+                    })
+                rede["membros"].sort(key=lambda m: (m["autorizado"], not m["online"], m["nome"] or m["id"]))
+            except (urllib.error.URLError, OSError, ValueError):
+                pass
+        saida["redes"].append(rede)
+    print(json.dumps(saida, ensure_ascii=False))
+
+
+def criar(nome):
+    st = garantir_servico()
+    no = st.get("address", "")
+    # Faixa 10.147.X.0/24 sorteada (a mesma família de endereços que o ZeroTier usa)
+    x = random.randint(1, 254)
+    config = {
+        "name": nome[:64], "private": True, "enableBroadcast": True, "multicastLimit": 64,
+        "v4AssignMode": {"zt": True},
+        "ipAssignmentPools": [{"ipRangeStart": f"10.147.{x}.1", "ipRangeEnd": f"10.147.{x}.254"}],
+        "routes": [{"target": f"10.147.{x}.0/24", "via": None}],
+    }
+    rede = api(f"/controller/network/{no}______", "POST", config)
+    nid = rede["id"]
+    api(f"/network/{nid}", "POST", {})
+    api(f"/controller/network/{nid}/member/{no}", "POST", {"authorized": True})
+    c = ler_cfg()
+    c["redes"][nid] = {"nome": nome, "minha": True}
+    gravar_cfg(c)
+    liberar_firewall()
+    print(nid)
+
+
+def entrar(nid, nome=""):
+    garantir_servico()
+    api(f"/network/{nid}", "POST", {})
+    c = ler_cfg()
+    c["redes"].setdefault(nid, {"nome": nome, "minha": False})
+    gravar_cfg(c)
+    liberar_firewall()
+
+
+def main():
+    a = sys.argv[1:]
+    try:
+        if not a or a[0] == "estado":
+            estado()
+        elif a[0] == "criar" and len(a) == 2 and a[1].strip():
+            criar(a[1].strip())
+        elif a[0] in ("entrar", "ligar") and len(a) == 2:
+            nid = a[1].strip().lower().replace(" ", "")
+            if not ID.match(nid):
+                sys.exit("Código inválido: são 16 letras e números (ex.: 8056c2e21c000001).")
+            entrar(nid)
+        elif a[0] == "desligar" and len(a) == 2 and ID.match(a[1]):
+            if ativo():
+                api(f"/network/{a[1]}", "DELETE")
+                desligar_se_vazio()
+        elif a[0] == "remover" and len(a) == 2 and ID.match(a[1]):
+            c = ler_cfg()
+            info = c["redes"].pop(a[1], {})
+            gravar_cfg(c)
+            if ativo():
+                api(f"/network/{a[1]}", "DELETE")
+                if info.get("minha"):
+                    api(f"/controller/network/{a[1]}", "DELETE")
+                desligar_se_vazio()
+        elif a[0] in ("aprovar", "bloquear") and len(a) == 3 and ID.match(a[1]) and MEMBRO.match(a[2]):
+            api(f"/controller/network/{a[1]}/member/{a[2]}", "POST", {"authorized": a[0] == "aprovar"})
+        elif a[0] == "nomear" and len(a) == 3 and MEMBRO.match(a[1]):
+            c = ler_cfg()
+            if a[2].strip():
+                c["nomes"][a[1]] = a[2].strip()[:40]
+            else:
+                c["nomes"].pop(a[1], None)
+            gravar_cfg(c)
+        else:
+            sys.exit("uso: lan estado|criar <nome>|entrar <código>|ligar|desligar|remover <id>|aprovar|bloquear <id> <membro>|nomear <membro> <nome>")
+    except urllib.error.HTTPError as e:
+        sys.exit(f"A LAN virtual recusou o pedido ({e.code}).")
+    except (urllib.error.URLError, OSError) as e:
+        sys.exit(f"A LAN virtual não respondeu: {e}")
+
+
+if __name__ == "__main__":
+    main()

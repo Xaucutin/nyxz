@@ -26,7 +26,8 @@
     "vscode": "nyxz-vscode.repo",
     "ghostty": "_copr_scottames-ghostty.repo",
     "lact": "_copr_ilyaz-LACT.repo",
-    "sunshine": "_copr_lizardbyte-stable.repo"
+    "sunshine": "_copr_lizardbyte-stable.repo",
+    "zerotier": "nyxz-zerotier.repo"
   },
   "itens": [
     {
@@ -250,6 +251,24 @@
       ],
       "padrao": false,
       "tamanho_mb": 40
+    },
+    {
+      "id": "lan",
+      "categoria": "jogos",
+      "nome": "LAN virtual (estilo Radmin)",
+      "descricao": "Jogue em LAN com amigos pela internet (Minecraft \"Abrir para LAN\", jogos com LAN). Os amigos no Windows, Mac ou celular usam o ZeroTier, que é grátis. Só roda com uma rede ligada.",
+      "tipo": "rpm",
+      "pacotes": [
+        "zerotier-one"
+      ],
+      "repos": [
+        "zerotier"
+      ],
+      "comandos": [
+        "systemctl disable zerotier-one.service"
+      ],
+      "padrao": true,
+      "tamanho_mb": 10
     },
     {
       "id": "sunshine",

@@ -6,6 +6,10 @@
   nyxz-net-root aplicar                     reaplica o que está salvo (no boot e após
                                             importar uma VPN)
   nyxz-net-root estado                      JSON com o que está valendo
+  nyxz-net-root lan ligar|desligar          liga ou desliga o serviço do ZeroTier (LAN
+                                            virtual); ao ligar, entrega ao usuário a
+                                            chave da API local (~/.zeroTierOneAuthToken)
+  nyxz-net-root lan firewall                libera no firewall as interfaces zt* da LAN
 
 Chamado com pkexec, sem senha para quem está na sessão ativa (ação org.nyxz.rede):
 só aceita estas opções fixas, nunca texto livre. O estado fica em /etc/nyxz/rede.json.
@@ -18,7 +22,10 @@ servidores das VPNs salvas (para conseguir reconectar).
 import ipaddress
 import json
 import os
+import pwd
 import re
+import shutil
+import time
 import socket
 import subprocess
 import sys
@@ -164,6 +171,50 @@ def dns_aplicar(perfil):
     subprocess.run(["resolvectl", "flush-caches"], capture_output=True)
 
 
+# ---------------------------------------------------------------- LAN virtual (ZeroTier)
+ZT_TOKEN = Path("/var/lib/zerotier-one/authtoken.secret")
+
+
+def usuario():
+    uid = os.environ.get("PKEXEC_UID", "")
+    if not uid.isdigit():
+        erro("Use pela Nyxz (pkexec).")
+    return pwd.getpwuid(int(uid))
+
+
+def lan_ligar():
+    if not shutil.which("zerotier-one"):
+        erro("A LAN virtual não está instalada. Instale em Configurações → Apps e componentes.")
+    subprocess.run(["systemctl", "start", "zerotier-one.service"], check=False)
+    for _ in range(50):          # o token nasce no primeiro início do serviço
+        if ZT_TOKEN.is_file():
+            break
+        time.sleep(0.2)
+    if not ZT_TOKEN.is_file():
+        erro("O serviço da LAN virtual não iniciou.")
+    # A mesma chave que o zerotier-cli procura na pasta pessoal (é o jeito oficial de
+    # um usuário comum mandar no serviço). Só o dono lê.
+    u = usuario()
+    destino = Path(u.pw_dir) / ".zeroTierOneAuthToken"
+    tmp = destino.with_suffix(".tmp")
+    tmp.write_text(ZT_TOKEN.read_text().strip())
+    os.chown(tmp, u.pw_uid, u.pw_gid)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, destino)
+    lan_firewall()
+
+
+def lan_firewall():
+    """Interfaces zt* na zona "trusted" do firewalld (só na sessão do serviço)."""
+    if not shutil.which("firewall-cmd"):
+        return
+    if subprocess.run(["firewall-cmd", "--state"], capture_output=True).returncode != 0:
+        return
+    for nome in os.listdir("/sys/class/net"):
+        if re.fullmatch(r"zt[a-z0-9]{1,13}", nome):
+            subprocess.run(["firewall-cmd", "--zone=trusted", f"--change-interface={nome}"], capture_output=True)
+
+
 def main():
     a = sys.argv[1:]
     e = ler_estado()
@@ -185,6 +236,12 @@ def main():
             gravar_estado(e)
         else:
             killswitch_desligar()
+    elif a == ["lan", "ligar"]:
+        lan_ligar()
+    elif a == ["lan", "desligar"]:
+        subprocess.run(["systemctl", "stop", "zerotier-one.service"], check=False)
+    elif a == ["lan", "firewall"]:
+        lan_firewall()
     elif a == ["estado"]:
         print(json.dumps({"killswitch": killswitch_ativo(), "dns": e.get("dns", "automatico")}))
     else:

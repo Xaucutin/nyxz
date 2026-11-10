@@ -224,6 +224,18 @@ PanelWindow {
                 }
             }
 
+            // ---------------------------------------------- LAN virtual (só com rede ligada)
+            Item {
+                visible: VpnEstado.lan
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 30
+                Image { anchors.centerIn: parent; source: "icones/lan.svg"; sourceSize: Qt.size(16, 16); opacity: 0.85 }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: Quickshell.execDetached(["/usr/libexec/nyxz/configuracoes", "lan"])
+                }
+            }
+
             // ---------------------------------------------- Modo jogo e replay (só quando ligados)
             Item {
                 visible: JogoEstado.modoJogo

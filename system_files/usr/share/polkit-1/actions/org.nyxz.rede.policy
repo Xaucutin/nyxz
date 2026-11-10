@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
-<!-- Kill switch e DNS da Nyxz: sem senha para quem está sentado no PC (sessão ativa).
+<!-- Kill switch, DNS e LAN virtual da Nyxz: sem senha para quem está sentado no PC (sessão ativa).
      O programa só aceita opções fixas (ligar/desligar, perfis de DNS da lista). -->
 <policyconfig>
   <vendor>Nyxz</vendor>
   <action id="org.nyxz.rede">
-    <description>Change the VPN kill switch and encrypted DNS</description>
-    <description xml:lang="pt_BR">Mudar o kill switch da VPN e o DNS criptografado</description>
+    <description>Change the VPN kill switch, encrypted DNS and virtual LAN</description>
+    <description xml:lang="pt_BR">Mudar o kill switch da VPN, o DNS criptografado e a LAN virtual</description>
     <message>Authentication is required to change network protection</message>
     <message xml:lang="pt_BR">É preciso autenticar para mudar a proteção da rede</message>
     <defaults>
