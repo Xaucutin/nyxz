@@ -1,0 +1,16 @@
+[Unit]
+Description=Nyxz: reaplica o kill switch da VPN no boot
+# Antes da rede subir: com o kill switch ligado, nada vaza entre o boot e a VPN
+DefaultDependencies=no
+Before=network-pre.target
+Wants=network-pre.target
+After=local-fs.target
+ConditionPathExists=/etc/nyxz/rede.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nyxz/nyxz-net-root aplicar
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

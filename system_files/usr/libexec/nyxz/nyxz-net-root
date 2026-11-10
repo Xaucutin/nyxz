@@ -1,0 +1,195 @@
+#!/usr/bin/python3 -I
+"""Parte da rede da Nyxz que precisa de administrador (primeira etapa do nyxz-netd).
+
+  nyxz-net-root killswitch ligar|desligar   liga ou desliga o bloqueio fora da VPN
+  nyxz-net-root dns <perfil>                automatico|cloudflare|quad9|adguard|mullvad
+  nyxz-net-root aplicar                     reaplica o que está salvo (no boot e após
+                                            importar uma VPN)
+  nyxz-net-root estado                      JSON com o que está valendo
+
+Chamado com pkexec, sem senha para quem está na sessão ativa (ação org.nyxz.rede):
+só aceita estas opções fixas, nunca texto livre. O estado fica em /etc/nyxz/rede.json.
+
+Kill switch: uma tabela própria do nftables ("inet nyxz_killswitch"), sem mexer nas
+dos outros (firewalld, Podman, ZeroTier). Com ela, só saem pela internet os pacotes
+que vão pela VPN; continuam liberados a rede local, a LAN virtual (zt*), o DHCP e os
+servidores das VPNs salvas (para conseguir reconectar).
+"""
+import ipaddress
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+ESTADO = Path("/etc/nyxz/rede.json")
+CONEXOES = Path("/etc/NetworkManager/system-connections")
+DNS_CONF = Path("/etc/systemd/resolved.conf.d/50-nyxz-dns.conf")
+TABELA = "nyxz_killswitch"
+
+# DNS criptografado (DNS-over-TLS). "#nome" é o nome no certificado do servidor.
+DNS = {
+    "cloudflare": ["1.1.1.1#cloudflare-dns.com", "1.0.0.1#cloudflare-dns.com",
+                   "2606:4700:4700::1111#cloudflare-dns.com", "2606:4700:4700::1001#cloudflare-dns.com"],
+    "quad9": ["9.9.9.9#dns.quad9.net", "149.112.112.112#dns.quad9.net", "2620:fe::fe#dns.quad9.net"],
+    "adguard": ["94.140.14.14#dns.adguard-dns.com", "94.140.15.15#dns.adguard-dns.com",
+                "2a10:50c0::ad1:ff#dns.adguard-dns.com"],
+    "mullvad": ["194.242.2.3#adblock.dns.mullvad.net", "2a07:e340::3#adblock.dns.mullvad.net"],
+}
+LOCAIS4 = "10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10, 224.0.0.0/4, 255.255.255.255"
+LOCAIS6 = "fe80::/10, fc00::/7, ff00::/8"
+
+
+def erro(msg):
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def ler_estado():
+    try:
+        return json.loads(ESTADO.read_text())
+    except (OSError, ValueError):
+        return {"killswitch": False, "dns": "automatico"}
+
+
+def gravar_estado(e):
+    ESTADO.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ESTADO.with_suffix(".tmp")
+    tmp.write_text(json.dumps(e, indent=2))
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, ESTADO)
+
+
+# ---------------------------------------------------------------- VPNs salvas
+def vpns_salvas():
+    """Interfaces e servidores das VPNs do NetworkManager (WireGuard e OpenVPN)."""
+    interfaces, servidores = set(), set()
+    if not CONEXOES.is_dir():
+        return interfaces, servidores
+    for arq in CONEXOES.glob("*.nmconnection"):
+        try:
+            texto = arq.read_text(errors="replace")
+        except OSError:
+            continue
+        if not re.search(r"^type=(wireguard|vpn)$", texto, re.M):
+            continue
+        m = re.search(r"^interface-name=([A-Za-z0-9_.-]{1,15})$", texto, re.M)
+        if m:
+            interfaces.add(m.group(1))
+        for alvo in re.findall(r"^endpoint=(\S+)$", texto, re.M):     # WireGuard
+            servidores.add(alvo.rsplit(":", 1)[0].strip("[]"))
+        for linha in re.findall(r"^remote=(.+)$", texto, re.M):       # OpenVPN
+            for item in linha.split(","):
+                partes = item.strip().split()
+                if partes:
+                    servidores.add(partes[0].split(":")[0])
+    return interfaces, servidores
+
+
+def resolver(hosts):
+    ips4, ips6 = set(), set()
+    for h in hosts:
+        if not re.fullmatch(r"[A-Za-z0-9.:-]{1,253}", h):
+            continue
+        try:
+            for info in socket.getaddrinfo(h, None):
+                ip = ipaddress.ip_address(info[4][0])
+                (ips4 if ip.version == 4 else ips6).add(str(ip))
+        except (socket.gaierror, ValueError):
+            pass
+    return ips4, ips6
+
+
+# ---------------------------------------------------------------- kill switch
+def nft(regras):
+    r = subprocess.run(["nft", "-f", "-"], input=regras, text=True, capture_output=True)
+    if r.returncode != 0:
+        erro("nftables recusou as regras: " + r.stderr.strip())
+
+
+def killswitch_ligar(e):
+    interfaces, servidores = vpns_salvas()
+    ips4, ips6 = resolver(servidores)
+    # No boot ainda não há DNS: usa também os endereços guardados da última vez
+    ips4 |= {i for i in e.get("ips", []) if ":" not in i}
+    ips6 |= {i for i in e.get("ips", []) if ":" in i}
+    e["ips"] = sorted(ips4 | ips6)
+    # Interfaces de VPN e da LAN virtual: as das VPNs salvas + nomes comuns
+    nomes = sorted(interfaces | {"wg*", "tun*", "tap*", "zt*"})
+    lista_if = ", ".join(f'"{n}"' for n in nomes)
+    regras = [
+        f"table inet {TABELA} {{",
+        "  chain saida {",
+        "    type filter hook output priority filter; policy accept;",
+        '    oifname "lo" accept',
+        f"    oifname {{ {lista_if} }} accept",
+        f"    ip daddr {{ {LOCAIS4} }} accept",
+        f"    ip6 daddr {{ {LOCAIS6} }} accept",
+        "    udp dport { 67, 68, 546, 547 } accept",
+    ]
+    if ips4:
+        regras.append(f"    ip daddr {{ {', '.join(sorted(ips4))} }} accept")
+    if ips6:
+        regras.append(f"    ip6 daddr {{ {', '.join(sorted(ips6))} }} accept")
+    regras += ["    reject with icmpx admin-prohibited", "  }", "}"]
+    # Apaga a versão anterior (se houver) e cria a nova numa transação só
+    nft(f"table inet {TABELA}\ndelete table inet {TABELA}\n" + "\n".join(regras) + "\n")
+
+
+def killswitch_desligar():
+    subprocess.run(["nft", "delete", "table", "inet", TABELA], capture_output=True)
+
+
+def killswitch_ativo():
+    return subprocess.run(["nft", "list", "table", "inet", TABELA], capture_output=True).returncode == 0
+
+
+# ---------------------------------------------------------------- DNS
+def dns_aplicar(perfil):
+    if perfil == "automatico":
+        DNS_CONF.unlink(missing_ok=True)
+    else:
+        DNS_CONF.parent.mkdir(parents=True, exist_ok=True)
+        DNS_CONF.write_text(
+            "# Gerado pela Nyxz (Configurações → VPN e DNS). Não edite.\n"
+            "[Resolve]\n"
+            f"DNS={' '.join(DNS[perfil])}\n"
+            "DNSOverTLS=yes\n"
+            # "~." faz estes servidores valerem para tudo, no lugar do DNS do provedor
+            "Domains=~.\n")
+        os.chmod(DNS_CONF, 0o644)
+    subprocess.run(["systemctl", "try-reload-or-restart", "systemd-resolved.service"], capture_output=True)
+    subprocess.run(["resolvectl", "flush-caches"], capture_output=True)
+
+
+def main():
+    a = sys.argv[1:]
+    e = ler_estado()
+    if a == ["killswitch", "ligar"]:
+        killswitch_ligar(e)
+        e["killswitch"] = True
+        gravar_estado(e)
+    elif a == ["killswitch", "desligar"]:
+        killswitch_desligar()
+        e["killswitch"] = False
+        gravar_estado(e)
+    elif len(a) == 2 and a[0] == "dns" and (a[1] in DNS or a[1] == "automatico"):
+        dns_aplicar(a[1])
+        e["dns"] = a[1]
+        gravar_estado(e)
+    elif a == ["aplicar"]:
+        if e.get("killswitch"):
+            killswitch_ligar(e)
+            gravar_estado(e)
+        else:
+            killswitch_desligar()
+    elif a == ["estado"]:
+        print(json.dumps({"killswitch": killswitch_ativo(), "dns": e.get("dns", "automatico")}))
+    else:
+        erro(__doc__)
+
+
+if __name__ == "__main__":
+    main()

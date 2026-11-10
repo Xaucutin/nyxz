@@ -63,3 +63,7 @@ power-profiles-daemon
 steam-devices
 # Bluetooth (controles, fones e teclados sem fio); o serviço só roda se houver adaptador
 bluez
+# VPN: OpenVPN no NetworkManager (o WireGuard já vem no kernel) e o comando wg
+NetworkManager-openvpn
+wireguard-tools
+nftables

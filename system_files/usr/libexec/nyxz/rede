@@ -1,0 +1,177 @@
+#!/usr/bin/python3 -I
+# VPN, kill switch e DNS da Nyxz, do lado do usuário (Configurações → VPN e DNS, painel rápido).
+#
+#   rede estado                      JSON: VPNs salvas, qual está ligada, kill switch e DNS
+#   rede vpn importar <arquivo>      .conf (WireGuard) ou .ovpn (OpenVPN); usuário e senha
+#                                    do OpenVPN, se houver, vão pela entrada: {"usuario","senha"}
+#   rede vpn ligar|desligar|remover <uuid>
+#   rede vpn alternar                liga a última VPN usada ou desliga a que está ligada
+#   rede killswitch ligar|desligar
+#   rede dns automatico|cloudflare|quad9|adguard|mullvad
+#   rede ip                          IP público e país (só quando pedido)
+#
+# A VPN é do NetworkManager (WireGuard no kernel: ~0 de RAM). O que precisa de
+# administrador passa pelo nyxz-net-root (pkexec, sem senha na sessão ativa).
+import json
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+ROOT = "/usr/libexec/nyxz/nyxz-net-root"
+ESTADO_ROOT = Path("/etc/nyxz/rede.json")
+ULTIMA = Path.home() / ".config/nyxz/vpn-ultima"
+
+
+def nmcli(*args, entrada=None):
+    r = subprocess.run(["nmcli", *args], capture_output=True, text=True, input=entrada)
+    return r.returncode, r.stdout, r.stderr.strip()
+
+
+def campos(linha):
+    """nmcli -t separa por ":" e escapa ":" do valor como "\\:"."""
+    saida, atual, i = [], "", 0
+    while i < len(linha):
+        c = linha[i]
+        if c == "\\" and i + 1 < len(linha):
+            atual += linha[i + 1]
+            i += 2
+            continue
+        if c == ":":
+            saida.append(atual)
+            atual = ""
+        else:
+            atual += c
+        i += 1
+    saida.append(atual)
+    return saida
+
+
+def vpns():
+    _, s, _ = nmcli("-t", "-f", "NAME,UUID,TYPE,ACTIVE,DEVICE", "connection", "show")
+    lista = []
+    for linha in s.splitlines():
+        c = campos(linha)
+        if len(c) >= 5 and c[2] in ("wireguard", "vpn"):
+            lista.append({"nome": c[0], "uuid": c[1], "tipo": "WireGuard" if c[2] == "wireguard" else "OpenVPN",
+                          "ligada": c[3] == "yes", "interface": c[4]})
+    return lista
+
+
+def estado():
+    try:
+        r = json.loads(ESTADO_ROOT.read_text())
+    except (OSError, ValueError):
+        r = {}
+    try:
+        ultima = ULTIMA.read_text().strip()
+    except OSError:
+        ultima = ""
+    print(json.dumps({"vpns": vpns(), "killswitch": bool(r.get("killswitch")),
+                      "dns": r.get("dns", "automatico"), "ultima": ultima}, ensure_ascii=False))
+
+
+def root(*args):
+    r = subprocess.run(["pkexec", ROOT, *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit(r.stderr.strip() or "Não foi possível mudar a proteção da rede.")
+
+
+def importar(arquivo):
+    p = Path(arquivo).expanduser()
+    if not p.is_file():
+        sys.exit("Arquivo não encontrado.")
+    tipo = {".conf": "wireguard", ".ovpn": "openvpn"}.get(p.suffix.lower())
+    if not tipo:
+        sys.exit("Use um arquivo .conf (WireGuard) ou .ovpn (OpenVPN).")
+    # O WireGuard usa o nome do arquivo como nome da interface (máximo 15 letras)
+    if tipo == "wireguard" and len(p.stem) > 15:
+        sys.exit("O nome do arquivo .conf precisa ter até 15 letras (ex.: proton-br.conf). Renomeie e tente de novo.")
+    codigo, s, e = nmcli("connection", "import", "type", tipo, "file", str(p))
+    if codigo != 0:
+        sys.exit("O NetworkManager não aceitou o arquivo: " + (e or s))
+    uuid = ""
+    for linha in s.splitlines():   # "Conexão "x" (uuid) adicionada com sucesso."
+        if "(" in linha and ")" in linha:
+            uuid = linha[linha.rfind("(") + 1:linha.rfind(")")]
+    if uuid:
+        # Não liga sozinha no boot: quem liga é você (ou o painel rápido)
+        nmcli("connection", "modify", uuid, "connection.autoconnect", "no")
+        dados = sys.stdin.read() if not sys.stdin.isatty() else ""
+        cred = json.loads(dados) if dados.strip() else {}
+        if tipo == "openvpn" and cred.get("usuario"):
+            nmcli("connection", "modify", uuid, "+vpn.data", f"username={cred['usuario']}")
+            if cred.get("senha"):
+                nmcli("connection", "modify", uuid, "+vpn.data", "password-flags=0",
+                      "vpn.secrets", f"password={cred['senha']}")
+    # Kill switch ligado: libera o servidor da VPN nova
+    try:
+        if json.loads(ESTADO_ROOT.read_text()).get("killswitch"):
+            root("aplicar")
+    except (OSError, ValueError):
+        pass
+    print(uuid)
+
+
+def ligar(uuid):
+    codigo, _, e = nmcli("connection", "up", "uuid", uuid)
+    if codigo != 0:
+        sys.exit("A VPN não conectou: " + e.splitlines()[-1] if e else "A VPN não conectou.")
+    ULTIMA.parent.mkdir(parents=True, exist_ok=True)
+    ULTIMA.write_text(uuid)
+
+
+def alternar():
+    ligadas = [v for v in vpns() if v["ligada"]]
+    if ligadas:
+        for v in ligadas:
+            nmcli("connection", "down", "uuid", v["uuid"])
+        return
+    todas = vpns()
+    if not todas:
+        sys.exit("Nenhuma VPN salva. Importe uma em Configurações → VPN e DNS.")
+    try:
+        alvo = ULTIMA.read_text().strip()
+    except OSError:
+        alvo = ""
+    if alvo not in [v["uuid"] for v in todas]:
+        alvo = todas[0]["uuid"]
+    ligar(alvo)
+
+
+def ip_publico():
+    # Pergunta à Cloudflare (o mesmo serviço do DNS padrão) só quando a página pede
+    try:
+        with urllib.request.urlopen("https://www.cloudflare.com/cdn-cgi/trace", timeout=6) as r:
+            d = dict(l.split("=", 1) for l in r.read().decode().splitlines() if "=" in l)
+        print(json.dumps({"ip": d.get("ip", ""), "pais": d.get("loc", "")}))
+    except Exception:
+        print(json.dumps({"ip": "", "pais": ""}))
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a[0] == "vpn" and len(a) == 3 and a[1] == "importar":
+        importar(a[2])
+    elif a[0] == "vpn" and len(a) == 3 and a[1] == "ligar":
+        ligar(a[2])
+    elif a[0] == "vpn" and len(a) == 3 and a[1] == "desligar":
+        nmcli("connection", "down", "uuid", a[2])
+    elif a[0] == "vpn" and len(a) == 3 and a[1] == "remover":
+        nmcli("connection", "delete", "uuid", a[2])
+    elif a[0] == "vpn" and a[1:] == ["alternar"]:
+        alternar()
+    elif a[0] == "killswitch" and len(a) == 2 and a[1] in ("ligar", "desligar"):
+        root("killswitch", a[1])
+    elif a[0] == "dns" and len(a) == 2:
+        root("dns", a[1])
+    elif a == ["ip"]:
+        ip_publico()
+    else:
+        sys.exit("uso: rede estado|vpn …|killswitch ligar|desligar|dns <perfil>|ip")
+
+
+if __name__ == "__main__":
+    main()

@@ -9,7 +9,7 @@ import Quickshell.Io
 Pagina {
     id: p
     titulo: "Rede"
-    descricao: "Cabo e Wi-Fi. VPN, proxy e LAN virtual chegam nas próximas fases."
+    descricao: "Cabo e Wi-Fi. A VPN, o kill switch e o DNS criptografado têm página própria: VPN e DNS."
 
     property var dispositivos: []
     property var redes: []

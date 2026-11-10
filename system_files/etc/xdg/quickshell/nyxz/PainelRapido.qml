@@ -223,6 +223,13 @@ PanelWindow {
 
             // ---------------------------------------------- jogos e foco
             Linha {
+                visible: VpnEstado.temVpn
+                titulo: "VPN"
+                detalhe: VpnEstado.ligada ? "Ligada: " + VpnEstado.nome : "Desligada."
+                ligado: VpnEstado.ligada
+                onAlternado: VpnEstado.alternar()
+            }
+            Linha {
                 titulo: "Modo jogo"
                 detalhe: "Liga sozinho com jogos da Steam; aqui é para os outros."
                 ligado: JogoEstado.modoJogo

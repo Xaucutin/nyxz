@@ -211,6 +211,19 @@ PanelWindow {
                 Layout.rightMargin: 6
             }
 
+            // ---------------------------------------------- VPN (só quando ligada)
+            Item {
+                visible: VpnEstado.ligada
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 30
+                Image { anchors.centerIn: parent; source: "icones/escudo.svg"; sourceSize: Qt.size(16, 16); opacity: 0.85 }
+                MouseArea {
+                    anchors.fill: parent
+                    // Clique abre a página da VPN (o nome aparece lá)
+                    onClicked: Quickshell.execDetached(["/usr/libexec/nyxz/configuracoes", "vpn"])
+                }
+            }
+
             // ---------------------------------------------- Modo jogo e replay (só quando ligados)
             Item {
                 visible: JogoEstado.modoJogo

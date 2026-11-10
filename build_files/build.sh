@@ -169,16 +169,15 @@ done
 # O Dev Hub usa o tema, os ícones e os componentes das Configurações.
 ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-dev/Tema.qml
 ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-dev/icones
-for f in Botao.qml Pagina.qml Linha.qml Comando.qml Interruptor.qml; do
+for f in Botao.qml Pagina.qml Linha.qml Comando.qml Interruptor.qml Campo.qml; do
   ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-dev/$f"
 done
-# A biblioteca de jogos usa o tema, os ícones e os componentes das Configurações e do Dev Hub.
+# A biblioteca de jogos usa o tema, os ícones e os componentes das Configurações.
 ln -sf ../nyxz/Tema.qml /etc/xdg/quickshell/nyxz-jogos/Tema.qml
 ln -sfn ../nyxz/icones /etc/xdg/quickshell/nyxz-jogos/icones
-for f in Botao.qml Comando.qml; do
+for f in Botao.qml Comando.qml Campo.qml; do
   ln -sf "../nyxz-config/$f" "/etc/xdg/quickshell/nyxz-jogos/$f"
 done
-ln -sf ../nyxz-dev/Campo.qml /etc/xdg/quickshell/nyxz-jogos/Campo.qml
 
 # ---------------------------------------------------------------- serviços
 log "Serviços"
@@ -189,7 +188,7 @@ systemctl enable greetd.service
 # baixa em segundo plano e aplica no próximo boot que o usuário fizer.
 systemctl disable bootc-fetch-apply-updates.timer 2>/dev/null || true
 systemctl mask bootc-fetch-apply-updates.timer 2>/dev/null || true
-systemctl enable nyxz-atualizar.timer nyxz-migracoes.service
+systemctl enable nyxz-atualizar.timer nyxz-migracoes.service nyxz-rede.service
 # Bluetooth: só acorda quando há adaptador (bluetooth.target)
 systemctl enable bluetooth.service 2>/dev/null || true
 # Servidor SSH desligado por padrão: num computador pessoal, a porta 22 aberta na rede

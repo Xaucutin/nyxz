@@ -11,6 +11,7 @@ ShellRoot {
 
     readonly property var paginas: [
         { id: "rede", nome: "Rede" },
+        { id: "vpn", nome: "VPN e DNS" },
         { id: "som", nome: "Som" },
         { id: "telas", nome: "Telas" },
         { id: "teclado", nome: "Teclado e mouse" },
@@ -149,7 +150,7 @@ ShellRoot {
                         active: ativa
                         opacity: ativa ? 1 : 0
                         source: {
-                            const mapa = { rede: "PaginaRede.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
+                            const mapa = { rede: "PaginaRede.qml", vpn: "PaginaVpn.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
                                            teclado: "PaginaTeclado.qml", controles: "PaginaControles.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", componentes: "PaginaComponentes.qml", datahora: "PaginaDataHora.qml",
                                            atualizacoes: "PaginaAtualizacoes.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];

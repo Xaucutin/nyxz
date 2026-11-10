@@ -6,4 +6,4 @@ Comment=Rede, som, telas, teclado, atualizações e informações do sistema
 Exec=/usr/libexec/nyxz/configuracoes
 Icon=preferences-system
 Categories=Settings;System;
-Keywords=config;controle;controles;gamepad;joystick;bluetooth;ajustes;wifi;rede;internet;som;audio;tela;monitor;resolucao;hz;teclado;mouse;atualizar;atualizacao;sobre;ram;memoria;
+Keywords=config;vpn;wireguard;openvpn;dns;killswitch;proxy;controle;controles;gamepad;joystick;bluetooth;ajustes;wifi;rede;internet;som;audio;tela;monitor;resolucao;hz;teclado;mouse;atualizar;atualizacao;sobre;ram;memoria;
