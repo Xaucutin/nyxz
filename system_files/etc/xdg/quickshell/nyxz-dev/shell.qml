@@ -11,13 +11,15 @@ ShellRoot {
     id: raiz
 
     readonly property var paginas: [
+        { id: "projetos", nome: "Projetos" },
         { id: "bancos", nome: "Bancos locais" },
         { id: "portas", nome: "Portas em uso" },
         { id: "ssh", nome: "SSH" },
         { id: "cofre", nome: "Cofre" },
         { id: "discord", nome: "Bots do Discord" },
         { id: "embeds", nome: "Embeds" },
-        { id: "dominios", nome: "Domínios e túnel" }
+        { id: "dominios", nome: "Domínios e túnel" },
+        { id: "limpeza", nome: "Limpeza" }
     ]
     property int atual: 0
 
@@ -144,7 +146,7 @@ ShellRoot {
                         active: ativa
                         opacity: ativa ? 1 : 0
                         source: {
-                            const mapa = { bancos: "PaginaBancos.qml", portas: "PaginaPortas.qml", ssh: "PaginaSsh.qml", cofre: "PaginaCofre.qml", discord: "PaginaDiscord.qml", embeds: "PaginaEmbeds.qml", dominios: "PaginaDominios.qml" };
+                            const mapa = { bancos: "PaginaBancos.qml", portas: "PaginaPortas.qml", ssh: "PaginaSsh.qml", cofre: "PaginaCofre.qml", discord: "PaginaDiscord.qml", embeds: "PaginaEmbeds.qml", dominios: "PaginaDominios.qml", projetos: "PaginaProjetos.qml", limpeza: "PaginaLimpeza.qml" };
                             return mapa[modelData.id];
                         }
                         transform: Translate { y: ativa ? 0 : 10 }

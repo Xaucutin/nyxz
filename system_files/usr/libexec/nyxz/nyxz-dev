@@ -51,6 +51,21 @@ Túnel público (Cloudflare, sem conta; link temporário *.trycloudflare.com):
   nyxz-dev tunel abrir <porta>
   nyxz-dev tunel fechar <porta>
 
+Sessões de projeto (pasta + bancos + comando + links + segredos do cofre):
+  nyxz-dev projetos listar                                JSON: projetos e se a sessão está aberta
+  nyxz-dev projetos adicionar <nome> <pasta>
+  nyxz-dev projetos configurar <nome>                     JSON pela entrada padrão (bancos, comando, urls, segredos)
+  nyxz-dev projetos remover <nome>
+  nyxz-dev projetos abrir|fechar <nome>                   liga/desliga tudo da sessão
+  nyxz-dev projetos logs <nome>                           saída do comando de desenvolvimento
+  nyxz-dev projetos shell <nome>                          terminal na pasta, com os segredos no ambiente
+  nyxz-dev projetos proteger <nome>                       verificação no Git + .env.example
+  nyxz-dev segredos verificar                             (usado pelo Git) bloqueia commit com valor do cofre
+
+Limpeza de disco para dev:
+  nyxz-dev limpeza analisar [dias]                        JSON: o que dá para apagar e quanto libera
+  nyxz-dev limpeza apagar <id> [<id> ...]
+
 Progresso (criar): linhas "PASSO|texto" e "LOG|texto"; última: "FIM|ok" ou "FIM|erro|mensagem".
 """
 import json
@@ -172,6 +187,14 @@ def cofre_ler(nome, tipo="segredo"):
 def cofre_remover(nome, tipo="segredo"):
     if cofre_ok():
         rodar(["secret-tool", "clear", "app", "nyxz", "tipo", tipo, "nome", nome])
+
+
+def cofre_nomes(tipo="segredo"):
+    if not cofre_ok():
+        return []
+    r = subprocess.run(["secret-tool", "search", "--all", "app", "nyxz", "tipo", tipo], capture_output=True, text=True)
+    return sorted({l.split(" = ", 1)[1] for l in (r.stdout + "\n" + r.stderr).splitlines()
+                   if l.startswith("attribute.nome = ")})
 
 
 def cofre_listar():
@@ -972,6 +995,306 @@ def tunel_fechar(porta):
     return rodar(["systemctl", "--user", "stop", f"nyxz-tunel-{int(porta)}"])[0]
 
 
+# ------------------------------------------------------------------ sessões de projeto
+
+PROJETOS = PASTA / "projetos.json"
+
+
+def ler_projetos():
+    try:
+        return json.loads(PROJETOS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def gravar_projetos(lista):
+    PASTA.mkdir(parents=True, exist_ok=True)
+    PROJETOS.write_text(json.dumps(lista, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def projeto(nome):
+    return next((x for x in ler_projetos() if x["nome"] == nome), None)
+
+
+def unidade_projeto(nome):
+    return f"nyxz-projeto-{nome}"
+
+
+def ambiente_projeto(pj):
+    """Ambiente com os segredos do cofre (nunca gravados em arquivo) e as linguagens do mise."""
+    env = dict(os.environ, PATH=f"{SHIMS}:{Path.home() / '.local/bin'}:{os.environ.get('PATH', '')}")
+    for nome in pj.get("segredos", []):
+        valor = cofre_ler(nome).strip()
+        if valor:
+            env[nome] = valor
+    return env
+
+
+def projetos_listar():
+    lista = []
+    for pj in ler_projetos():
+        aberto = rodar(["systemctl", "--user", "is-active", "--quiet", unidade_projeto(pj["nome"])])[0] == 0
+        lista.append({**pj, "aberto": aberto, "existe": Path(pj["pasta"]).is_dir(),
+                      "git": (Path(pj["pasta"]) / ".git").exists(),
+                      "protegido": (Path(pj["pasta"]) / ".git/hooks/pre-commit").exists()})
+    print(json.dumps(lista, ensure_ascii=False))
+
+
+def projetos_adicionar(nome, pasta):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", nome):
+        print("Nome inválido (minúsculas, números, - e _).", file=sys.stderr)
+        return 1
+    caminho = Path(os.path.expanduser(pasta)).resolve()
+    if not caminho.is_dir():
+        print(f"A pasta {caminho} não existe.", file=sys.stderr)
+        return 1
+    lista = [x for x in ler_projetos() if x["nome"] != nome]
+    lista.append({"nome": nome, "pasta": str(caminho), "bancos": [], "comando": "", "urls": [], "segredos": []})
+    gravar_projetos(lista)
+    return 0
+
+
+def projetos_configurar(nome, dados):
+    lista = ler_projetos()
+    for pj in lista:
+        if pj["nome"] == nome:
+            for chave in ("bancos", "comando", "urls", "segredos"):
+                if chave in dados:
+                    pj[chave] = dados[chave]
+            gravar_projetos(lista)
+            return 0
+    return 1
+
+
+def projetos_remover(nome):
+    projetos_fechar(nome)
+    gravar_projetos([x for x in ler_projetos() if x["nome"] != nome])
+    return 0
+
+
+def projetos_abrir(nome):
+    pj = projeto(nome)
+    if not pj:
+        print(f"Projeto {nome} não encontrado.", file=sys.stderr)
+        return 1
+    for b in pj.get("bancos", []):
+        rodar(["podman", "start", f"nyxz-{b}"])
+    # VS Code só se estiver instalado (é opcional, como tudo na Nyxz)
+    if shutil.which("code"):
+        rodar(["setsid", "-f", "nyx", "run", "code", pj["pasta"]])
+    if pj.get("comando"):
+        rodar(["systemctl", "--user", "reset-failed", unidade_projeto(nome)])
+        codigo, saida = rodar(["systemd-run", "--user", "--collect", f"--unit={unidade_projeto(nome)}",
+                               f"--description=Sessão do projeto {nome} (Dev Hub)",
+                               "/usr/libexec/nyxz/nyxz-dev", "projetos", "executar", nome])
+        if codigo != 0:
+            print(saida.strip(), file=sys.stderr)
+    if pj.get("urls"):
+        # Dá tempo do servidor de desenvolvimento subir antes de abrir o navegador
+        rodar(["setsid", "-f", "sh", "-c", 'sleep 4; for u in "$@"; do xdg-open "$u"; done', "abrir", *pj["urls"]])
+    return 0
+
+
+def projetos_executar(nome):
+    pj = projeto(nome)
+    if not pj or not pj.get("comando"):
+        return 1
+    os.chdir(pj["pasta"])
+    os.execvpe("sh", ["sh", "-c", pj["comando"]], ambiente_projeto(pj))
+
+
+def projetos_shell(nome):
+    pj = projeto(nome)
+    if not pj:
+        return 1
+    os.chdir(pj["pasta"])
+    shell = os.environ.get("SHELL", "/bin/bash")
+    os.execvpe(shell, [shell], ambiente_projeto(pj))
+
+
+def projetos_fechar(nome):
+    pj = projeto(nome)
+    rodar(["systemctl", "--user", "stop", unidade_projeto(nome)])
+    for b in (pj or {}).get("bancos", []):
+        rodar(["podman", "stop", "-t", "10", f"nyxz-{b}"])
+    return 0
+
+
+def projetos_logs(nome):
+    _, saida = rodar(["journalctl", "--user", "-u", unidade_projeto(nome), "-n", "200", "-o", "cat", "--no-pager"])
+    print(saida)
+
+
+GANCHO = """#!/bin/sh
+# Nyxz: bloqueia o commit se algum segredo do cofre aparecer no que vai ser commitado.
+# Para pular uma vez (sabendo o que está fazendo): git commit --no-verify
+exec /usr/libexec/nyxz/nyxz-dev segredos verificar
+"""
+
+
+def projetos_proteger(nome):
+    pj = projeto(nome)
+    if not pj:
+        return 1
+    pasta = Path(pj["pasta"])
+    if not (pasta / ".git").exists():
+        print("A pasta não é um repositório Git (rode git init primeiro).", file=sys.stderr)
+        return 1
+    gancho = pasta / ".git/hooks/pre-commit"
+    gancho.parent.mkdir(parents=True, exist_ok=True)
+    if gancho.exists() and "nyxz-dev segredos" not in gancho.read_text(errors="replace"):
+        print("O projeto já tem um pre-commit próprio; ele não foi trocado.", file=sys.stderr)
+        return 1
+    gancho.write_text(GANCHO, encoding="utf-8")
+    os.chmod(gancho, 0o755)
+    exemplo = pasta / ".env.example"
+    if pj.get("segredos") and not exemplo.exists():
+        exemplo.write_text("# Os valores ficam no cofre da Nyxz (Dev Hub → Cofre); o Dev Hub injeta ao rodar.\n" +
+                           "".join(f"{n}=\n" for n in pj["segredos"]), encoding="utf-8")
+    gi = pasta / ".gitignore"
+    linhas = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
+    if ".env" not in linhas:
+        gi.write_text("\n".join(linhas + [".env"]).strip() + "\n", encoding="utf-8")
+    return 0
+
+
+def segredos_verificar():
+    codigo, diff = rodar(["git", "diff", "--cached", "-U0", "--no-color"])
+    if codigo != 0:
+        return 0
+    adicionadas = "\n".join(l[1:] for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++"))
+    if not adicionadas:
+        return 0
+    achados = []
+    for tipo in ("segredo", "banco"):
+        for nome in cofre_nomes(tipo):
+            valor = cofre_ler(nome, tipo=tipo).strip()
+            if len(valor) >= 6 and valor in adicionadas:
+                achados.append(nome)
+    if achados:
+        print("Commit bloqueado pela Nyxz: o valor destes segredos do cofre aparece no que vai ser commitado:", file=sys.stderr)
+        for n in sorted(set(achados)):
+            print(f"  - {n}", file=sys.stderr)
+        print("Tire o valor do código (use a variável de ambiente) e tente de novo.", file=sys.stderr)
+        return 1
+    return 0
+
+
+# ------------------------------------------------------------------ limpeza de disco
+
+CASA = Path.home()
+CACHES = [
+    ("npm", ".npm/_cacache"), ("pip", ".cache/pip"), ("pnpm", ".local/share/pnpm/store"),
+    ("Yarn", ".cache/yarn"), ("Bun", ".bun/install/cache"), ("Cargo (Rust)", ".cargo/registry/cache"),
+    ("Go", ".cache/go-build"), ("Gradle", ".gradle/caches"), ("mise (downloads)", ".local/share/mise/downloads"),
+    ("Cache de shaders da Steam", ".local/share/Steam/steamapps/shadercache"),
+    ("Cache de shaders da Steam (Flatpak)", ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/shadercache"),
+    ("Lixeira", ".local/share/Trash"),
+]
+FORA = (".local", ".cache", ".var", ".npm", ".cargo", ".bun", ".gradle", ".config", ".mozilla")
+
+
+def tamanho(caminho):
+    r = subprocess.run(["du", "-sb", str(caminho)], capture_output=True, text=True)
+    try:
+        return int(r.stdout.split()[0])
+    except (IndexError, ValueError):
+        return 0
+
+
+def node_modules_parados(dias):
+    limite = time.time() - dias * 86400
+    achados = []
+    for raiz, dirs, _ in os.walk(CASA):
+        rel = Path(raiz).relative_to(CASA)
+        if rel.parts and rel.parts[0] in FORA:
+            dirs[:] = []
+            continue
+        if "node_modules" in dirs:
+            nm = Path(raiz) / "node_modules"
+            # Projeto parado: nada na pasta (fora o node_modules) mudou há "dias" dias
+            recente = 0
+            for e in os.scandir(raiz):
+                if e.name != "node_modules":
+                    try:
+                        recente = max(recente, e.stat(follow_symlinks=False).st_mtime)
+                    except OSError:
+                        pass
+            if recente < limite:
+                achados.append(nm)
+            dirs.remove("node_modules")
+        dirs[:] = [d for d in dirs if not d.startswith(".")]   # pastas ocultas ficam de fora
+    return achados
+
+
+def limpeza_itens(dias=30):
+    itens = []
+    for nm in node_modules_parados(dias):
+        itens.append({"id": f"pasta:{nm}", "grupo": f"node_modules de projetos parados há {dias}+ dias",
+                      "nome": str(nm.parent.relative_to(CASA)), "bytes": tamanho(nm)})
+    for nome, rel in CACHES:
+        c = CASA / rel
+        if c.exists():
+            b = tamanho(c)
+            if b > 0:
+                itens.append({"id": f"pasta:{c}", "grupo": "Caches", "nome": nome, "bytes": b})
+    if shutil.which("podman"):
+        _, saida = rodar(["podman", "system", "df", "--format", "json"])
+        try:
+            for linha in json.loads(saida or "[]"):
+                if linha.get("Type") == "Images" and int(linha.get("Reclaimable") or 0) > 0:
+                    itens.append({"id": "podman", "grupo": "Podman", "nome": "Imagens sem uso (os bancos do Dev Hub ficam)",
+                                  "bytes": int(linha["Reclaimable"])})
+        except (ValueError, TypeError, KeyError):
+            pass
+    if shutil.which("flatpak"):
+        _, saida = rodar(["flatpak", "uninstall", "--user", "--unused", "--noninteractive", "--assumeno"])
+        if "Nothing unused" not in saida and re.search(r"\d+\.\s", saida):
+            itens.append({"id": "flatpak", "grupo": "Flatpak", "nome": "Runtimes que nenhum app usa mais", "bytes": -1})
+    return itens
+
+
+def limpeza_analisar(dias):
+    itens = limpeza_itens(int(dias))
+    print(json.dumps({"itens": itens, "total": sum(i["bytes"] for i in itens if i["bytes"] > 0)}, ensure_ascii=False))
+
+
+def pode_apagar(alvo):
+    """Só node_modules dentro da pasta pessoal (fora das ocultas) ou um dos caches conhecidos."""
+    alvo = alvo.resolve()
+    if alvo in [(CASA / rel).resolve() for _, rel in CACHES]:
+        return True
+    if alvo.name != "node_modules" or CASA not in alvo.parents:
+        return False
+    rel = alvo.relative_to(CASA)
+    return not any(parte.startswith(".") for parte in rel.parts) and "node_modules" not in rel.parts[:-1]
+
+
+def limpeza_apagar(ids):
+    # Nada de caminhos quaisquer vindos de fora: cada id é validado aqui
+    liberado = 0
+    for ident in ids:
+        if ident.startswith("pasta:"):
+            alvo = Path(ident[6:])
+            if not alvo.exists() or not pode_apagar(alvo):
+                continue
+            b = tamanho(alvo)
+            if alvo.name == "Trash":
+                for sub in ("files", "info", "expunged"):
+                    shutil.rmtree(alvo / sub, ignore_errors=True)
+            else:
+                shutil.rmtree(alvo, ignore_errors=True)
+            liberado += b
+        elif ident == "podman":
+            antes = tamanho(CASA / ".local/share/containers/storage")
+            rodar(["podman", "image", "prune", "-a", "-f"])
+            liberado += max(0, antes - tamanho(CASA / ".local/share/containers/storage"))
+        elif ident == "flatpak":
+            rodar(["flatpak", "uninstall", "--user", "--unused", "-y", "--noninteractive"])
+    print(json.dumps({"liberado": liberado}))
+    return 0
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:2] == ["bancos", "tipos"]:
@@ -994,6 +1317,32 @@ if __name__ == "__main__":
         print(cofre_ler(a[2]), end="")
     elif a[:2] == ["cofre", "remover"] and len(a) == 3:
         cofre_remover(a[2])
+    elif a[:2] == ["projetos", "listar"]:
+        projetos_listar()
+    elif a[:2] == ["projetos", "adicionar"] and len(a) == 4:
+        sys.exit(projetos_adicionar(a[2], a[3]))
+    elif a[:2] == ["projetos", "configurar"] and len(a) == 3:
+        sys.exit(projetos_configurar(a[2], json.loads(sys.stdin.read() or "{}")))
+    elif a[:2] == ["projetos", "remover"] and len(a) == 3:
+        sys.exit(projetos_remover(a[2]))
+    elif a[:2] == ["projetos", "abrir"] and len(a) == 3:
+        sys.exit(projetos_abrir(a[2]))
+    elif a[:2] == ["projetos", "fechar"] and len(a) == 3:
+        sys.exit(projetos_fechar(a[2]))
+    elif a[:2] == ["projetos", "executar"] and len(a) == 3:
+        sys.exit(projetos_executar(a[2]))
+    elif a[:2] == ["projetos", "shell"] and len(a) == 3:
+        sys.exit(projetos_shell(a[2]))
+    elif a[:2] == ["projetos", "logs"] and len(a) == 3:
+        projetos_logs(a[2])
+    elif a[:2] == ["projetos", "proteger"] and len(a) == 3:
+        sys.exit(projetos_proteger(a[2]))
+    elif a[:2] == ["segredos", "verificar"]:
+        sys.exit(segredos_verificar())
+    elif a[:2] == ["limpeza", "analisar"]:
+        limpeza_analisar(a[2] if len(a) > 2 else 30)
+    elif a[:2] == ["limpeza", "apagar"] and len(a) >= 3:
+        sys.exit(limpeza_apagar(a[2:]))
     elif a[:2] == ["dominios", "listar"]:
         dominios_listar()
     elif a[:2] == ["dominios", "adicionar"] and len(a) == 4:

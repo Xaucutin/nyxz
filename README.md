@@ -63,7 +63,9 @@ Também feito: **Discord Studio** no Dev Hub. "Bots do Discord" cria projetos em
 
 Também feitos e conferidos na VM (imagem 00d28fa): **domínios `.test` com HTTPS** (`loja.test` → `localhost:3000`, certificado do mkcert aceito pelo sistema sem avisos, Caddy na conta do usuário só enquanto há domínios ligados, senha pedida para registrar o nome) e **túnel público** (link `*.trycloudflare.com` acessado de fora pela internet; ao fechar, o link para de responder).
 
-**Próximos da Fase 4:** sessões de projeto (com o cofre injetando as variáveis) e limpeza de disco para dev.
+Também feitos e conferidos na VM: **sessões de projeto** (Dev Hub → Projetos: abrir liga os bancos, abre o VS Code, roda o comando de desenvolvimento com os segredos do cofre como variáveis e abre os links; fechar desliga tudo; "Proteger segredos no Git" bloqueia commit que contenha um valor do cofre e gera `.env.example`) e **limpeza de disco para dev** (node_modules de projetos parados, caches de npm/pip/pnpm/bun/cargo/go/mise, imagens sem uso do Podman, shaders da Steam, Flatpaks órfãos e lixeira; mostra o tamanho e só apaga o que for marcado).
+
+**Fase 4 concluída.** Pendentes dela: conectar um bot do Discord com token real e enviar um embed por webhook real (dependem de conta do usuário).
 
 ## Ferramentas de desenvolvimento
 
