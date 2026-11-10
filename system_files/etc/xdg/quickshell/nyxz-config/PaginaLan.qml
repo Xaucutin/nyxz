@@ -23,8 +23,41 @@ Pagina {
 
     function atualizar() { cmdEstado.rodar([cmd, "estado"]); }
     function avisar(t, erro) { aviso = t; avisoErro = !!erro; limpa.restart(); }
-    Component.onCompleted: atualizar()
-    Timer { interval: 4000; running: true; repeat: true; onTriggered: p.atualizar() }
+    // Voz pela LAN: sala aberta aqui e salas achadas nas redes ligadas
+    property bool vozInstalada: false
+    property bool vozAberta: false
+    property string vozIp: ""
+    property var salas: []
+    property var _achadas: []
+
+    Component.onCompleted: { atualizar(); cmdVoz.rodar(["/usr/libexec/nyxz/voz", "estado"]); }
+    Timer {
+        interval: 4000; running: true; repeat: true
+        onTriggered: { p.atualizar(); cmdVoz.rodar(["/usr/libexec/nyxz/voz", "estado"]); }
+    }
+    Comando {
+        id: cmdVoz
+        onPronto: s => {
+            try { const d = JSON.parse(s); p.vozInstalada = d.instalado; p.vozAberta = d.aberta; p.vozIp = d.ip; } catch (e) {}
+        }
+    }
+    // Procura salas a cada 8 s em todas as redes ligadas (um ping UDP por endereço, ~1 s)
+    Process {
+        id: procura
+        stdout: SplitParser {
+            onRead: linha => { try { p._achadas = p._achadas.concat(JSON.parse(linha)); } catch (e) {} }
+        }
+        onExited: { p.salas = p._achadas; p._achadas = []; }
+    }
+    Timer {
+        interval: 8000; running: p.vozInstalada; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            const ips = p.redes.filter(r => r.ligada && r.status === "OK" && r.ip).map(r => r.ip.split(",")[0].trim());
+            if (!ips.length || procura.running) { if (!ips.length) p.salas = []; return; }
+            procura.command = ["sh", "-c", 'for ip; do /usr/libexec/nyxz/voz procurar "$ip"; done', "sh"].concat(ips);
+            procura.running = true;
+        }
+    }
     Timer { id: limpa; interval: 7000; onTriggered: p.aviso = "" }
 
     Comando {
@@ -247,6 +280,63 @@ Pagina {
                         wrapMode: Text.Wrap
                         text: "Ninguém entrou ainda. Mande o código para os amigos; quando alguém pedir para entrar, aparece aqui para você aprovar. Clique no código de alguém para dar um apelido."
                         font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto4
+                    }
+
+                    // ------------------------------ Voz pela LAN (rede ligada e com IP)
+                    ColumnLayout {
+                        id: voz
+                        readonly property string meuIp: cartao.modelData.ip.split(",")[0].trim()
+                        readonly property string prefixo: meuIp.split(".").slice(0, 3).join(".") + "."
+                        readonly property var salas: p.salas.filter(s => s.ip.indexOf(prefixo) === 0)
+                        readonly property bool minhaAberta: p.vozAberta && p.vozIp === meuIp
+                        visible: cartao.modelData.ligada && cartao.modelData.status === "OK" && meuIp !== "" && p.vozInstalada
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 6
+
+                        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Tema.borda }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            Image { source: "icones/microfone.svg"; sourceSize: Qt.size(15, 15); opacity: 0.8 }
+                            Text {
+                                Layout.fillWidth: true
+                                text: voz.minhaAberta ? "Sua sala de voz está aberta" : voz.salas.length ? "Salas de voz nesta rede" : "Nenhuma sala de voz aberta nesta rede"
+                                font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto2
+                            }
+                            Botao {
+                                visible: !voz.minhaAberta
+                                texto: "Abrir sala de voz"
+                                ativo: !acao.running
+                                onClicado: acao.rodar(["/usr/libexec/nyxz/voz", "abrir", voz.meuIp, cartao.modelData.nome], "Sala aberta. Os amigos da rede já veem ela aqui (ou entram pelo Mumble em %s).".replace("%s", voz.meuIp))
+                            }
+                            Botao {
+                                visible: voz.minhaAberta
+                                texto: "Fechar a sala"
+                                perigo: true
+                                onClicado: acao.rodar(["/usr/libexec/nyxz/voz", "fechar"], "Sala fechada.")
+                            }
+                        }
+                        Repeater {
+                            model: voz.salas
+                            delegate: RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 25
+                                spacing: 10
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (modelData.minha ? "Sua sala" : "Sala em " + modelData.ip) + "  ·  "
+                                          + (modelData.pessoas === 1 ? "1 pessoa" : modelData.pessoas + " pessoas")
+                                    font.family: Tema.fonte; font.pixelSize: 12; color: Tema.texto
+                                }
+                                Botao {
+                                    texto: "Entrar na conversa"
+                                    principal: true
+                                    onClicado: Quickshell.execDetached(["/usr/libexec/nyxz/voz", "entrar", modelData.ip])
+                                }
+                            }
+                        }
                     }
                 }
             }

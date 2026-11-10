@@ -1,0 +1,183 @@
+#!/usr/bin/python3 -I
+# Voz pela LAN (ideia 22): sala de voz no PC de quem cria, pela LAN virtual (Redes de jogo).
+# Servidor Mumble (murmur) na conta do usuário, só enquanto a sala está aberta, ouvindo
+# só no IP da LAN virtual (nunca na internet). Quem não tem a Nyxz entra pelo app Mumble.
+#
+#   voz estado                     JSON: sala aberta aqui? em qual IP?
+#   voz abrir <ip> [nome]          abre a sala neste PC, no IP da rede escolhida
+#   voz fechar                     fecha a sala
+#   voz procurar <ip>              procura salas abertas na mesma rede (/24) desse IP
+#   voz entrar <ip>                abre o Mumble já entrando na sala
+import ipaddress
+import json
+import os
+import pwd
+import random
+import re
+import shutil
+import socket
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+PORTA = 64738
+UNIDADE = "nyxz-voz-sala"
+PASTA = Path.home() / ".local/share/nyxz/voz"
+INI = Path.home() / ".config/nyxz/voz/sala.ini"
+
+
+def ips_lan():
+    """IPs locais nas interfaces da LAN virtual (zt*)."""
+    r = subprocess.run(["ip", "-j", "-4", "addr", "show"], capture_output=True, text=True)
+    try:
+        dados = json.loads(r.stdout or "[]")
+    except ValueError:
+        return []
+    return [a["local"] for i in dados if i.get("ifname", "").startswith("zt")
+            for a in i.get("addr_info", []) if a.get("family") == "inet"]
+
+
+def ativa():
+    return subprocess.run(["systemctl", "--user", "is-active", "--quiet", UNIDADE]).returncode == 0
+
+
+def estado():
+    ip = ""
+    try:
+        m = re.search(r"^host=(\S+)", INI.read_text(), re.M)
+        ip = m.group(1) if m else ""
+    except OSError:
+        pass
+    aberta = ativa()
+    print(json.dumps({"instalado": shutil.which("mumble-server") is not None,
+                      "cliente": shutil.which("mumble") is not None,
+                      "aberta": aberta, "ip": ip if aberta else "", "porta": PORTA}))
+
+
+def abrir(ip, nome):
+    if not shutil.which("mumble-server"):
+        sys.exit("A Voz pela LAN não está instalada. Instale em Configurações → Apps e componentes.")
+    if ip not in ips_lan():
+        sys.exit("Esse IP não é deste PC numa rede de jogo ligada.")
+    PASTA.mkdir(parents=True, exist_ok=True)
+    INI.parent.mkdir(parents=True, exist_ok=True)
+    # Certificado da sala: o Mumble 1.4 não consegue gerar o próprio com o OpenSSL 3
+    # do Fedora ("Certificate or key generation failed"), então a Nyxz gera uma vez.
+    cert, chave = PASTA / "sala.crt", PASTA / "sala.key"
+    if not (cert.exists() and chave.exists()):
+        r = subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:3072", "-sha256", "-nodes",
+                            "-days", "3650", "-subj", "/CN=Nyxz Voz pela LAN",
+                            "-keyout", str(chave), "-out", str(cert)], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit("Não deu para criar o certificado da sala: " + r.stderr.strip()[-200:])
+        os.chmod(chave, 0o600)
+    nome = re.sub(r"[\r\n=]", " ", nome or "Sala da Nyxz")[:60]
+    INI.write_text(
+        "# Gerado pela Nyxz (Voz pela LAN). Refeito a cada vez que a sala abre.\n"
+        f"database={PASTA}/sala.sqlite\n"
+        "logfile=\n"
+        f"pidfile=\n"
+        # Só no IP da LAN virtual: ninguém de fora da rede alcança a sala
+        f"host={ip}\n"
+        f"port={PORTA}\n"
+        f"registerName={nome}\n"
+        f"welcometext=Bem-vindo à sala de voz de {nome}.\n"
+        # Opus sempre, 72 kbit/s por pessoa: voz limpa e atraso baixo
+        "opusthreshold=0\n"
+        "bandwidth=72000\n"
+        "users=20\n"
+        "allowping=true\n"
+        "certrequired=false\n"
+        # Sem anúncio por Bonjour/mDNS: a sala não aparece na rede de casa
+        "bonjour=false\n"
+        f"sslCert={cert}\n"
+        f"sslKey={chave}\n", encoding="utf-8")
+    subprocess.run(["systemctl", "--user", "stop", UNIDADE], capture_output=True)
+    subprocess.run(["systemctl", "--user", "reset-failed", UNIDADE], capture_output=True)
+    r = subprocess.run(["systemd-run", "--user", "--quiet", "--collect", f"--unit={UNIDADE}",
+                        "--description=Nyxz: sala de voz", "mumble-server", "-fg", "-ini", str(INI)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("A sala não abriu: " + r.stderr.strip())
+    for _ in range(20):      # espera o servidor responder
+        if ping(ip, 0.3):
+            return
+    sys.exit("A sala não respondeu. Veja: journalctl --user -u " + UNIDADE)
+
+
+def ping(ip, espera=0.5):
+    """Ping do Mumble (UDP): responde versão, pessoas na sala, limite e banda."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.settimeout(espera)
+        ident = random.getrandbits(64)
+        try:
+            s.sendto(struct.pack(">IQ", 0, ident), (ip, PORTA))
+            dados, _ = s.recvfrom(64)
+        except OSError:
+            return None
+    if len(dados) < 24:
+        return None
+    _, volta, usuarios, maximo, _ = struct.unpack(">IQIII", dados[:24])
+    return {"ip": ip, "pessoas": usuarios, "maximo": maximo} if volta == ident else None
+
+
+def procurar(ip):
+    """Manda um ping para cada endereço da /24 e junta quem responder em ~1,2 s."""
+    rede = ipaddress.ip_network(f"{ip}/24", strict=False)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.setblocking(False)
+        ident = random.getrandbits(64)
+        for alvo in rede.hosts():
+            try:
+                s.sendto(struct.pack(">IQ", 0, ident), (str(alvo), PORTA))
+            except OSError:
+                pass
+        achadas, fim = {}, time.monotonic() + 1.2
+        while time.monotonic() < fim:
+            try:
+                dados, (origem, _) = s.recvfrom(64)
+            except BlockingIOError:
+                time.sleep(0.03)
+                continue
+            except OSError:
+                break
+            if len(dados) >= 24:
+                _, volta, usuarios, maximo, _ = struct.unpack(">IQIII", dados[:24])
+                if volta == ident:
+                    achadas[origem] = {"ip": origem, "pessoas": usuarios, "maximo": maximo, "minha": origem in ips_lan()}
+    print(json.dumps(sorted(achadas.values(), key=lambda x: ipaddress.ip_address(x["ip"]))))
+
+
+def entrar(ip):
+    if not shutil.which("mumble"):
+        subprocess.run(["notify-send", "-a", "Nyxz", "Voz pela LAN", "Instale a Voz pela LAN em Configurações → Apps e componentes."])
+        sys.exit(1)
+    # Nome na sala: o nome da conta (sem espaços estranhos)
+    info = pwd.getpwuid(os.getuid())
+    nome = re.sub(r"[^A-Za-z0-9_.-]", "", (info.pw_gecos.split(",")[0] or info.pw_name).replace(" ", "_"))[:30] or info.pw_name
+    subprocess.Popen(["mumble", f"mumble://{nome}@{ip}:{PORTA}/?version=1.2.0"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a[0] == "abrir" and len(a) in (2, 3):
+        abrir(a[1], a[2] if len(a) == 3 else "")
+    elif a == ["fechar"]:
+        subprocess.run(["systemctl", "--user", "stop", UNIDADE], capture_output=True)
+    elif a[0] in ("procurar", "entrar") and len(a) == 2:
+        try:
+            ipaddress.IPv4Address(a[1])
+        except ValueError:
+            sys.exit("IP inválido.")
+        procurar(a[1]) if a[0] == "procurar" else entrar(a[1])
+    else:
+        sys.exit("uso: voz estado|abrir <ip> [nome]|fechar|procurar <ip>|entrar <ip>")
+
+
+if __name__ == "__main__":
+    main()

@@ -19,7 +19,7 @@
     {
       "id": "comunicacao",
       "nome": "Comunicação e mídia",
-      "descricao": "Discord e Spotify."
+      "descricao": "Discord, Spotify e voz pela LAN."
     }
   ],
   "repositorios": {
@@ -398,6 +398,20 @@
       ],
       "padrao": true,
       "tamanho_mb": 15
+    },
+    {
+      "id": "voz",
+      "categoria": "comunicacao",
+      "nome": "Voz pela LAN",
+      "descricao": "Salas de voz com os amigos pela LAN virtual, sem servidor de terceiros: o PC de quem abre a sala é o servidor (Mumble). Quem não tem a Nyxz entra pelo app Mumble.",
+      "tipo": "rpm",
+      "pacotes": [
+        "mumble",
+        "mumble-server",
+        "openssl"
+      ],
+      "padrao": true,
+      "tamanho_mb": 40
     }
   ]
 }
