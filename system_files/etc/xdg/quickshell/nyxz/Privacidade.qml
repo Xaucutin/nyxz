@@ -29,7 +29,13 @@ Item {
         // usam o microfone limpo.
         const nome = n.name || "";
         if (nome.indexOf("nyxz_mic_") === 0 || nome.indexOf("echo-cancel") === 0) return true;
-        return (p["application.name"] || "").toLowerCase().indexOf("quickshell") >= 0;
+        // O replay instantâneo grava o som do PC (não o microfone) e já tem a
+        // própria marca "replay" na barra.
+        const app = (p["application.name"] || "").toLowerCase();
+        const bin = (p["application.process.binary"] || "").toLowerCase();
+        if (app.indexOf("gpu-screen-recorder") >= 0 || bin.indexOf("gpu-screen-recorder") >= 0
+                || nome.indexOf("gsr") === 0) return true;
+        return app.indexOf("quickshell") >= 0;
     }
     function nomeApp(n) {
         const p = n.properties || {};

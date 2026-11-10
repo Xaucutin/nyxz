@@ -67,6 +67,8 @@ Também feitos e conferidos na VM: **sessões de projeto** (Dev Hub → Projetos
 
 **Fase 4 concluída.** Pendentes dela: conectar um bot do Discord com token real e enviar um embed por webhook real (dependem de conta do usuário).
 
+**Fase 5 — jogos e rede: em andamento.** **Modo jogo automático**: liga sozinho quando um jogo da Steam abre e desliga quando ele fecha (pelo `nyxz-scoped`), ou pelo painel rápido. Ele troca o som para o perfil "Jogo", silencia as notificações, põe a energia em desempenho, adia as atualizações automáticas e, se você quiser, pausa os bancos do Dev Hub e liga o replay. Ao sair, tudo volta como estava (`~/.config/nyxz/modo-jogo.json` guarda as escolhas). **Replay instantâneo** (gpu-screen-recorder): Alt+F10 salva os últimos 30 segundos em `~/Vídeos/Replays` e Alt+Shift+F10 liga ou desliga. A barra mostra um controle no Modo jogo e a marca "replay" enquanto grava; o indicador de privacidade não conta o replay, que grava o som do PC e não o microfone. Conferido na VM: Modo jogo liga e desliga voltando o estado, ícones na barra e indicador de privacidade. Falta conferir no PC real: a captura do replay (a VM não oferece captura KMS) e o perfil de energia "desempenho" (não existe em VM).
+
 ## Ferramentas de desenvolvimento
 
 - `tools/dev-servidor.py`: serve o shell, o login e as Configurações em `http://127.0.0.1/` (na VM: `10.0.2.2`). Na VM, `nyx dev` baixa o shell e reinicia; `nyx dev limpar` volta ao da imagem.

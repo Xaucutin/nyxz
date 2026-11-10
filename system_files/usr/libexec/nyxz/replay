@@ -24,6 +24,7 @@ case "${1:-}" in
     ;;
   desligar)
     systemctl --user stop "$UNIDADE"
+    systemctl --user reset-failed "$UNIDADE" 2>/dev/null || true
     ;;
   alternar)
     if systemctl --user is-active --quiet "$UNIDADE"; then "$0" desligar; notify-send -a Nyxz -i media-record "Replay desligado" "Nada está sendo gravado."
