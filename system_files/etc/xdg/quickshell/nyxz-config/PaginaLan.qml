@@ -123,7 +123,7 @@ Pagina {
                     ACCESS_DENIED: "Esperando o dono da rede aprovar você",
                     NOT_FOUND: "Rede não encontrada (o PC de quem criou está desligado?)",
                     PORT_ERROR: "Erro na interface da rede", CLIENT_TOO_OLD: "ZeroTier desatualizado" }[r.status];
-        return (s || r.status || "Conectando…") + (r.ip ? " · seu IP " + r.ip : "");
+        return (s || r.status || "Conectando…") + (r.ip ? " · seu IP " + ModoStreamer.ip(r.ip) : "");
     }
 
     // ---------------------------------------------- não instalada
@@ -269,7 +269,7 @@ Pagina {
                                 visible: p.nomeando !== membro.modelData.id
                                 Layout.fillWidth: true
                                 text: (membro.modelData.nome || membro.modelData.id)
-                                      + (membro.modelData.ip ? "  ·  " + membro.modelData.ip : "")
+                                      + (membro.modelData.ip ? "  ·  " + ModoStreamer.ip(membro.modelData.ip) : "")
                                       + (membro.modelData.online && !membro.modelData.eu && membro.modelData.ping >= 0 ? "  ·  " + membro.modelData.ping + " ms" : "")
                                       + (!membro.modelData.autorizado ? "  ·  quer entrar" : "")
                                 elide: Text.ElideRight

@@ -243,8 +243,8 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Backup | restic + rclone, timer | 🟢 |
 | Nyxz Sync | Repositório Git privado + lista de bloqueio + verificação de segredos | 🟢 |
 | Automações | Motor no shell (`Automacoes.qml`: Hyprland, Modo jogo, udev, conferência a cada 20 s) + ações em `/usr/libexec/nyxz/automacoes` | ✅ |
-| Congelar apps | `cgroup.freeze` nos escopos com as exceções da seção 3.4 | 🟡 |
-| Modo streamer | Detecção de captura + regras de ocultar no shell | 🟡 |
+| Congelar apps | `/usr/libexec/nyxz/congelar` (`cgroup.freeze` + `memory.reclaim`) + `Congelar.qml` (foco pelo Hyprland), exceções da seção 3.4 | ✅ |
+| Modo streamer | `Streamer.qml` (captura `xdph`, OBS, Share) + capas `VeuStreamer.qml` + marca para as Configurações | ✅ |
 | Nyxz Doctor | `/usr/libexec/nyxz/doctor` (Python, só com a página aberta) + `nyxz-doctor-root` (pkexec) + página nas Configurações | ✅ |
 | Dual boot | Entrada do Windows no GRUB, NTFS, relógio local, aviso do Início rápido | 🟡 |
 

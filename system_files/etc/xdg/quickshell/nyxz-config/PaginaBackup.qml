@@ -230,13 +230,13 @@ Pagina {
         spacing: 8
         Botao { texto: "Salvar"; ativo: hora.aceito && !salvar.running; onClicado: p.gravarConfig(p.e ? p.e.ligado : false) }
         Botao { texto: acao.running && p.progresso ? "Fazendo backup…" : "Fazer backup agora"; principal: true; ativo: !acao.running; onClicado: acao.rodar([p.cmd, "agora"], "Backup feito.") }
-        Botao { texto: p.senha ? "Esconder a senha" : "Mostrar a senha do backup"; onClicado: { if (p.senha) p.senha = ""; else cmdSenha.running = true; } }
+        Botao { texto: p.senha ? "Esconder a senha" : "Mostrar a senha do backup"; ativo: !ModoStreamer.ativo || p.senha !== ""; onClicado: { if (p.senha) p.senha = ""; else cmdSenha.running = true; } }
     }
     Text {
         visible: p.senha !== ""
         Layout.fillWidth: true
         wrapMode: Text.Wrap
-        text: "Senha do backup: " + p.senha + "\nAnote num papel e guarde. Sem ela, ninguém (nem você, se o Cofre se perder) consegue abrir o backup."
+        text: "Senha do backup: " + (ModoStreamer.ativo ? "oculta (modo streamer)" : p.senha) + "\nAnote num papel e guarde. Sem ela, ninguém (nem você, se o Cofre se perder) consegue abrir o backup."
         font.family: Tema.fonteMono; font.pixelSize: 12; color: Tema.aviso
     }
 

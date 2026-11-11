@@ -1,0 +1,317 @@
+#!/usr/bin/python3 -I
+# Congelar apps em segundo plano (ideia 33): apps escolhidos são congelados pelo freezer
+# do cgroup (cgroup.freeze) durante jogos ou depois de X minutos sem uso. Param de gastar
+# processador e parte da RAM deles vai para o zram (memory.reclaim). Voltam na hora ao
+# receberem foco: o shell (Congelar.qml) avisa cada troca de janela.
+#
+#   congelar estado                  JSON: ajustes e apps abertos (congelado, RAM, sem uso há…)
+#   congelar configurar              JSON pela entrada: {ligado, minutos, noJogo, apps}
+#   congelar foco <endereço>         janela focada: descongela o app dela e marca o uso
+#   congelar avaliar                 congela quem passou do tempo (o shell chama a cada minuto)
+#   congelar fim-jogo                descongela quem foi congelado por causa do jogo
+#   congelar agora|soltar <app>      congela ou descongela um app na mão
+#   congelar soltar-tudo
+#
+# Nunca congela: o app em foco, quem está tocando som, gravando ou transmitindo (stream
+# ativo no PipeWire) e, a não ser que você marque, apps de rede contínua (Discord…).
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+CASA = Path.home()
+CONFIG = CASA / ".config/nyxz/congelar.json"
+ESTADO = CASA / ".local/state/nyxz/congelar.json"
+RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+UID = os.getuid()
+BASE = Path(f"/sys/fs/cgroup/user.slice/user-{UID}.slice/user@{UID}.service")
+# Precisam de rede o tempo todo (chamadas, downloads, mensagens)
+REDE_CONTINUA = ["discord", "vesktop", "webcord", "steam", "zoom", "teams", "slack", "telegram",
+                 "signal", "obs", "qbittorrent", "transmission", "mumble", "sunshine"]
+# Nunca: o próprio sistema
+NUNCA = re.compile(r"^(quickshell|qs|shell|terminal|foot|ghostty|xdg-|pipewire|wireplumber|nyxz|dbus|gnome-keyring|"
+                   r"polkit|hypr|uwsm|app2unit|systemd|at-spi|gvfs|evolution|dconf|kded|baloo|flatpak-)", re.I)
+
+
+def ler(p, padrao):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return padrao
+
+
+def gravar(p, dados):
+    p = Path(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+def cfg():
+    return {"ligado": False, "minutos": 15, "noJogo": True, "apps": [], **ler(CONFIG, {})}
+
+
+def rodar(cmd, timeout=10):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def nome_app(unidade):
+    n = unidade.replace("\\x2d", "-")
+    n = re.sub(r"^app-(Hyprland|flatpak|niri|gnome|kde)-", "", n)
+    n = re.sub(r"^app-", "", n)
+    n = re.sub(r"(@[^.]*)?(-[0-9a-f]{6,}|-\d+)?\.(scope|service)$", "", n)
+    return n
+
+
+def escopos():
+    """Escopos de apps da sessão: {caminho, unidade, nome}."""
+    out = []
+    for pasta in (BASE / "app.slice", BASE / "nyxz.slice"):
+        for cg in pasta.rglob("*.scope"):
+            if (cg / "cgroup.freeze").exists():
+                out.append({"caminho": cg, "unidade": cg.name, "nome": nome_app(cg.name)})
+    return out
+
+
+def ler_num(p):
+    try:
+        return int(Path(p).read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def congelado(cg):
+    try:
+        return "frozen 1" in (cg / "cgroup.events").read_text()
+    except OSError:
+        return False
+
+
+def cgroup_do_pid(pid):
+    try:
+        linha = Path(f"/proc/{pid}/cgroup").read_text().strip().split("::", 1)[1]
+        return Path("/sys/fs/cgroup" + linha)
+    except (OSError, IndexError):
+        return None
+
+
+def com_stream():
+    """Escopos com stream ativo no PipeWire (tocando, gravando ou capturando)."""
+    try:
+        objetos = json.loads(rodar(["pw-dump"]) or "[]")
+    except ValueError:
+        return set()
+    caminhos = set()
+    for o in objetos:
+        if o.get("type") != "PipeWire:Interface:Node":
+            continue
+        info = o.get("info", {})
+        p = info.get("props", {})
+        if not str(p.get("media.class", "")).startswith("Stream/") or info.get("state") != "running":
+            continue
+        pid = p.get("application.process.id")
+        cg = cgroup_do_pid(pid) if pid else None
+        if cg:
+            caminhos.add(str(cg))
+    return caminhos
+
+
+def escolhido(nome, c):
+    return any(a.lower() in nome.lower() for a in c["apps"] if a)
+
+
+def bloqueado(nome, c):
+    """Motivo para não congelar (ou "")."""
+    if NUNCA.match(nome):
+        return "faz parte do sistema"
+    if any(r in nome.lower() for r in REDE_CONTINUA) and not escolhido(nome, c):
+        return "precisa de rede o tempo todo"
+    return ""
+
+
+def foco_atual():
+    try:
+        pid = json.loads(rodar(["hyprctl", "-j", "activewindow"]) or "{}").get("pid")
+    except ValueError:
+        pid = None
+    cg = cgroup_do_pid(pid) if pid else None
+    return str(cg) if cg else ""
+
+
+def congelar_cg(cg):
+    antes = ler_num(cg / "memory.current")
+    (cg / "cgroup.freeze").write_text("1")
+    # Empurra metade da RAM do app para o zram (volta sozinha quando ele precisar)
+    try:
+        (cg / "memory.reclaim").write_text(str(antes // 2))
+    except OSError:
+        pass
+    return max(0, antes - ler_num(cg / "memory.current"))
+
+
+def soltar_cg(cg):
+    try:
+        (cg / "cgroup.freeze").write_text("0")
+    except OSError:
+        pass
+
+
+# ------------------------------------------------------------------ comandos
+def estado():
+    c = cfg()
+    e = ler(ESTADO, {})
+    agora = time.time()
+    streams = com_stream()
+    vistos = {}
+    for s in escopos():
+        cg = s["caminho"]
+        n = s["nome"]
+        item = vistos.setdefault(n, {"nome": n, "congelado": False, "ram": 0, "semUsoMin": None, "som": False,
+                                     "escolhido": escolhido(n, c), "bloqueio": bloqueado(n, c), "liberado": 0})
+        item["congelado"] = item["congelado"] or congelado(cg)
+        item["ram"] += ler_num(cg / "memory.current")
+        item["som"] = item["som"] or str(cg) in streams
+        info = e.get(s["unidade"], {})
+        if info.get("foco"):
+            m = int((agora - info["foco"]) / 60)
+            item["semUsoMin"] = m if item["semUsoMin"] is None else min(item["semUsoMin"], m)
+        item["liberado"] += info.get("liberado", 0) if item["congelado"] else 0
+    apps = sorted(vistos.values(), key=lambda x: (not x["escolhido"], -x["ram"]))
+    print(json.dumps({**c, "apps": c["apps"], "abertos": apps, "redeContinua": REDE_CONTINUA}, ensure_ascii=False))
+
+
+def configurar():
+    novo = json.loads(sys.stdin.read() or "{}")
+    c = cfg()
+    for k in ("ligado", "minutos", "noJogo", "apps"):
+        if k in novo:
+            c[k] = novo[k]
+    c["minutos"] = max(1, int(c["minutos"]))
+    gravar(CONFIG, c)
+    if not c["ligado"]:
+        soltar_tudo()
+    else:   # quem saiu da lista volta a rodar
+        for s in escopos():
+            if congelado(s["caminho"]) and not escolhido(s["nome"], c):
+                soltar_cg(s["caminho"])
+
+
+def foco(endereco):
+    try:
+        clientes = json.loads(rodar(["hyprctl", "-j", "clients"]) or "[]")
+    except ValueError:
+        return
+    pid = next((x.get("pid") for x in clientes if x.get("address", "").replace("0x", "") == endereco.replace("0x", "")), None)
+    cg = cgroup_do_pid(pid) if pid else None
+    if not cg:
+        return
+    if congelado(cg):
+        soltar_cg(cg)
+    e = ler(ESTADO, {})
+    e[cg.name] = {"foco": time.time()}
+    gravar(ESTADO, e)
+
+
+def avaliar():
+    c = cfg()
+    if not c["ligado"] or not c["apps"]:
+        return
+    e = ler(ESTADO, {})
+    agora = time.time()
+    jogo = c["noJogo"] and (RUNTIME / "nyxz-modo-jogo.json").exists()
+    focado = foco_atual()
+    streams = None
+    mudou = False
+    for s in escopos():
+        cg, n = s["caminho"], s["nome"]
+        if not escolhido(n, c) or congelado(cg) or str(cg) == focado or bloqueado(n, c) == "faz parte do sistema":
+            continue
+        info = e.setdefault(s["unidade"], {})
+        if "foco" not in info:
+            info["foco"] = agora      # visto agora pela primeira vez: começa a contar
+            mudou = True
+        parado = (agora - info["foco"]) / 60 >= c["minutos"]
+        if not (jogo or parado):
+            continue
+        if streams is None:
+            streams = com_stream()
+        if str(cg) in streams:
+            continue                  # tocando som, gravando ou transmitindo
+        try:
+            info["liberado"] = congelar_cg(cg)
+            info["motivo"] = "jogo" if jogo and not parado else "tempo"
+            mudou = True
+        except OSError:
+            pass
+    # Esquece escopos que já fecharam
+    vivos = {s["unidade"] for s in escopos()}
+    for u in [u for u in e if u not in vivos]:
+        del e[u]
+        mudou = True
+    if mudou:
+        gravar(ESTADO, e)
+
+
+def fim_jogo():
+    e = ler(ESTADO, {})
+    for s in escopos():
+        if e.get(s["unidade"], {}).get("motivo") == "jogo" and congelado(s["caminho"]):
+            soltar_cg(s["caminho"])
+            e[s["unidade"]]["foco"] = time.time()
+            e[s["unidade"]].pop("motivo", None)
+    gravar(ESTADO, e)
+
+
+def na_mao(nome, congelar):
+    achou = False
+    e = ler(ESTADO, {})
+    for s in escopos():
+        if s["nome"] == nome:
+            achou = True
+            if congelar:
+                if bloqueado(nome, cfg()) == "faz parte do sistema":
+                    sys.exit("Esse faz parte do sistema e não pode ser congelado.")
+                e.setdefault(s["unidade"], {})["liberado"] = congelar_cg(s["caminho"])
+            else:
+                soltar_cg(s["caminho"])
+                e.setdefault(s["unidade"], {})["foco"] = time.time()
+    if not achou:
+        sys.exit("Esse app não está aberto.")
+    gravar(ESTADO, e)
+
+
+def soltar_tudo():
+    for s in escopos():
+        if congelado(s["caminho"]):
+            soltar_cg(s["caminho"])
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a == ["configurar"]:
+        configurar()
+    elif a[0] == "foco" and len(a) == 2:
+        foco(a[1])
+    elif a == ["avaliar"]:
+        avaliar()
+    elif a == ["fim-jogo"]:
+        fim_jogo()
+    elif a[0] in ("agora", "soltar") and len(a) == 2:
+        na_mao(a[1], a[0] == "agora")
+    elif a == ["soltar-tudo"]:
+        soltar_tudo()
+    else:
+        sys.exit("uso: congelar estado|configurar|foco <endereço>|avaliar|fim-jogo|agora <app>|soltar <app>|soltar-tudo")
+
+
+if __name__ == "__main__":
+    main()

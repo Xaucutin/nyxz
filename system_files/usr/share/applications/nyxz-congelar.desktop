@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Congelar apps
+GenericName=Apps em segundo plano
+Comment=Pausa apps parados ou durante jogos para liberar processador e memória
+Exec=/usr/libexec/nyxz/configuracoes congelar
+Icon=weather-snow
+Categories=System;Settings;
+Keywords=congelar;pausar;suspender;segundo plano;memoria;ram;cpu;economia;

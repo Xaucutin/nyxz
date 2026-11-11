@@ -16,7 +16,8 @@ Singleton {
     // O manual (painel) e o do Modo jogo são separados: um não desliga o outro.
     property bool naoPerturbeManual: false
     property bool naoPerturbeJogo: false
-    readonly property bool naoPerturbe: naoPerturbeManual || naoPerturbeJogo
+    // O modo streamer também guarda as notificações (aparecem depois, no histórico)
+    readonly property bool naoPerturbe: naoPerturbeManual || naoPerturbeJogo || Streamer.ocultaNotificacoes
 
     // Menu do botão direito de um app na barra
     property var menuToplevel: null

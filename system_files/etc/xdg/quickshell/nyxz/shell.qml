@@ -23,6 +23,9 @@ ShellRoot {
     MenuTarefa {}
     // Automações: percebe os gatilhos (sem serviço extra) e chama /usr/libexec/nyxz/automacoes
     Automacoes {}
+    // Congelar apps em segundo plano (desligado por padrão) e capas do modo streamer
+    Congelar {}
+    VeuStreamer {}
 
     // Janela de senha de administrador (polkit). Fica num Loader: se o Quickshell
     // instalado não tiver o módulo de polkit, só ela falha, e o agente antigo
@@ -59,6 +62,13 @@ ShellRoot {
         function alternar(): void { Estado.naoPerturbeManual = !Estado.naoPerturbeManual; }
         function jogo(ligar: bool): void { Estado.naoPerturbeJogo = ligar; }
         function definir(ligar: bool): void { Estado.naoPerturbeManual = ligar; }   // automações
+    }
+
+    // Modo streamer: qs -c nyxz ipc call streamer alternar | definir true/false
+    IpcHandler {
+        target: "streamer"
+        function alternar(): void { Streamer.alternar(); }
+        function definir(ligar: bool): void { if (ligar !== Streamer.ativo) Streamer.alternar(); }
     }
 
     IpcHandler {

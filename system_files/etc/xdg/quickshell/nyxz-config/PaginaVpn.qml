@@ -123,7 +123,7 @@ Pagina {
         }
         Text {
             Layout.fillWidth: true
-            text: (p.algumaLigada ? "Protegido pela VPN" : "Sem VPN") + (p.ip ? " · IP público " + p.ip + (p.pais ? " (" + p.pais + ")" : "") : "")
+            text: (p.algumaLigada ? "Protegido pela VPN" : "Sem VPN") + (p.ip ? " · IP público " + ModoStreamer.ip(p.ip) + (p.pais ? " (" + p.pais + ")" : "") : "")
             font.family: Tema.fonte; font.pixelSize: 13; color: Tema.texto
         }
     }

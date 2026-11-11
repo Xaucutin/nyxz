@@ -280,6 +280,12 @@ PanelWindow {
                 MouseArea { id: areaParear; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.parearStreaming() }
             }
             Linha {
+                titulo: "Modo streamer"
+                detalhe: Streamer.ativo ? "Ligado (" + Streamer.motivo + "): notificações guardadas e janelas com segredos cobertas." : "Liga sozinho ao transmitir ou gravar a tela."
+                ligado: Streamer.ativo
+                onAlternado: Streamer.alternar()
+            }
+            Linha {
                 titulo: "Não perturbe"
                 detalhe: "Guarda as notificações e mostra depois."
                 ligado: Estado.naoPerturbeManual

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Modo streamer
+GenericName=Privacidade na tela
+Comment=Esconde notificações, senhas e IPs enquanto a tela é transmitida ou gravada
+Exec=/usr/libexec/nyxz/configuracoes streamer
+Icon=camera-web
+Categories=System;Settings;
+Keywords=streamer;stream;live;obs;transmitir;gravar;privacidade;esconder;twitch;

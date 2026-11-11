@@ -35,6 +35,9 @@ hl.env("HYPRCURSOR_SIZE", "24")
 -- Os diálogos que importam (senha, energia, avisos) são feitos pelo shell da Nyxz.
 tentar(function() hl.config({ misc = { disable_hyprland_guiutils_check = true } }) end)
 tentar(function() hl.config({ ecosystem = { no_update_news = true, no_donation_nag = true } }) end)
+-- Congelar apps: um app congelado não responde ao "ping" do Hyprland até ser focado
+-- (aí ele volta na hora); sem isto apareceria "o app não está respondendo".
+tentar(function() hl.config({ misc = { enable_anr_dialog = false } }) end)
 
 -------------------
 ---- APARÊNCIA ----

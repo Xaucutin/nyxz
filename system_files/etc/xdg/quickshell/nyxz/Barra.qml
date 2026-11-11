@@ -267,6 +267,29 @@ PanelWindow {
                 // Clique salva os últimos segundos (o mesmo que Alt+F10)
                 MouseArea { id: areaReplay; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.salvarReplay() }
             }
+            // Modo streamer ativo: clique desliga
+            Rectangle {
+                visible: Streamer.ativo
+                Layout.preferredWidth: rotuloStreamer.implicitWidth + 24
+                Layout.preferredHeight: 24
+                Layout.rightMargin: 4
+                radius: 12
+                color: areaStreamer.containsMouse ? Tema.hover : Tema.elevado
+                border.width: 1
+                border.color: Tema.borda
+                Rectangle {
+                    x: 9; anchors.verticalCenter: parent.verticalCenter
+                    width: 6; height: 6; radius: 3
+                    color: Tema.aviso
+                }
+                Text {
+                    id: rotuloStreamer
+                    x: 19; anchors.verticalCenter: parent.verticalCenter
+                    text: "streamer"
+                    font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto2
+                }
+                MouseArea { id: areaStreamer; anchors.fill: parent; hoverEnabled: true; onClicked: Streamer.alternar() }
+            }
             // Nyxz Share transmitindo: clique abre o painel (com o botão de parar)
             Rectangle {
                 visible: JogoEstado.share
