@@ -1,13 +1,13 @@
 # Instalar a Nyxz no PC (ao lado do Windows, sem pendrive)
 
 PC: BIOSTAR A520MH, Ryzen 5 5600GT, RX 7600, NVMe PNY 500 GB (Windows no C:).
-Plano: Windows continua igual; a Nyxz fica com **80 GB**; o instalador mora numa
+Plano: Windows continua igual; a Nyxz fica com **29 GB** (o máximo que o Windows deixou encolher ligado; o índice do NTFS trava o resto); o instalador mora numa
 partição de **4 GB** ("NYXZ") que depois volta para o Windows.
 
 Disco depois do preparo:
 
 ```
-[boot EFI 100 MB][reservada][Windows C:][NYXZ 4 GB][livre 80 GB → Nyxz][recuperação]
+[boot EFI 100 MB][reservada][Windows C:][NYXZ 4 GB][livre 29 GB → Nyxz][recuperação]
 ```
 
 Ensaiado numa VM com o mesmo desenho (partição de boot de 100 MB, "Windows" NTFS,
@@ -38,7 +38,7 @@ Ela volta logo depois (eu religo).
 
 ## Parte 2 — eu faço (com o seu "Sim" no aviso de permissão)
 
-1. Encolher o C: em 84 GB.
+1. Encolher o C: em 33 GB (feito em 11/11).
 2. Criar a partição **NYXZ** (4 GB, FAT32) logo depois do C:.
 3. Copiar a ISO para ela e trocar o nome no menu de boot (`EFI/BOOT/grub.cfg`).
 4. Religar a memória virtual automática.
@@ -57,7 +57,7 @@ Ela volta logo depois (eu religo).
 2. No resumo da instalação:
    - **Destino da instalação** → o disco **PNY 500 GB** já marcado → **Automática** →
      **NÃO** marque "Libere espaço removendo ou reduzindo partições" → deve mostrar
-     ~80 GB livres → **Pronto**.
+     ~29 GB livres → **Pronto**.
    - Aparece "**Aviso** ao verificar configuração de armazenamento" (a partição de boot
      tem menos de 500 MB). **É normal**, é só aviso: a Nyxz usa a mesma partição de boot
      do Windows.
