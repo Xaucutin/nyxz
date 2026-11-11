@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Automações
+GenericName=Quando acontecer, faça
+Comment=Quando acontecer algo (horário, app, jogo, rede, fone, controle), a Nyxz faz o que você pediu
+Exec=/usr/libexec/nyxz/configuracoes automacoes
+Icon=system-run
+Categories=System;Settings;
+Keywords=automacao;automacoes;atalhos;rotina;quando;gatilho;horario;regra;

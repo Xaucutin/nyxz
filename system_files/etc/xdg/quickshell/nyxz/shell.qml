@@ -21,6 +21,8 @@ ShellRoot {
     PainelRapido {}
     ColaAtalhos {}
     MenuTarefa {}
+    // Automações: percebe os gatilhos (sem serviço extra) e chama /usr/libexec/nyxz/automacoes
+    Automacoes {}
 
     // Janela de senha de administrador (polkit). Fica num Loader: se o Quickshell
     // instalado não tiver o módulo de polkit, só ela falha, e o agente antigo
@@ -51,11 +53,12 @@ ShellRoot {
         }
     }
 
-    // Não perturbe: qs -c nyxz ipc call notificacoes alternar | jogo true/false
+    // Não perturbe: qs -c nyxz ipc call notificacoes alternar | jogo true/false | definir true/false
     IpcHandler {
         target: "notificacoes"
         function alternar(): void { Estado.naoPerturbeManual = !Estado.naoPerturbeManual; }
         function jogo(ligar: bool): void { Estado.naoPerturbeJogo = ligar; }
+        function definir(ligar: bool): void { Estado.naoPerturbeManual = ligar; }   // automações
     }
 
     IpcHandler {

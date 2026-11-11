@@ -1,0 +1,376 @@
+#!/usr/bin/python3 -I
+# Automações (ideia 23, estilo Atalhos do iPhone): "quando acontecer X, faça Y".
+# Quem percebe os gatilhos é o próprio shell (Automacoes.qml, sem serviço extra); este
+# comando guarda as automações e executa as ações.
+#
+#   automacoes listar              JSON: automações, modelos, opções (perfis, VPNs…) e histórico
+#   automacoes salvar              uma automação em JSON pela entrada (com id: substitui)
+#   automacoes remover <id>
+#   automacoes ligar <id> sim|nao
+#   automacoes executar <id> [motivo]       roda as ações (o shell chama isto)
+#   automacoes testar                       roda as ações de uma automação vinda pela entrada
+#   automacoes dispositivos        JSON: [{tipo, nome}] (som, controle, pendrive, outro)
+#   automacoes baterias            JSON: [{nome, bateria}] dos aparelhos sem fio
+import datetime
+import json
+import os
+import re
+import secrets
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+CASA = Path.home()
+CONFIG = CASA / ".config/nyxz/automacoes.json"
+HISTORICO = CASA / ".local/state/nyxz/automacoes-historico.json"
+L = "/usr/libexec/nyxz/"
+
+GATILHOS = {
+    "horario": "Num horário",
+    "ao_entrar": "Ao entrar na sessão",
+    "app_abriu": "Um app abriu",
+    "app_fechou": "Um app fechou",
+    "jogo_comecou": "Um jogo começou",
+    "jogo_terminou": "Um jogo terminou",
+    "rede_conectou": "Conectou numa rede",
+    "rede_desconectou": "Desconectou de uma rede",
+    "dispositivo_conectado": "Um aparelho foi conectado",
+    "dispositivo_desconectado": "Um aparelho foi desconectado",
+    "monitor_conectado": "Uma tela foi conectada",
+    "bateria_baixa": "Bateria de um aparelho baixa",
+    "ram_alta": "Memória (RAM) alta",
+}
+ACOES = {
+    "perfil_som": "Perfil de som",
+    "saida_app": "Saída de som de um app",
+    "volume": "Volume",
+    "nao_perturbe": "Não perturbe",
+    "luz_azul": "Filtro de luz azul",
+    "brilho": "Brilho das telas",
+    "wallpaper": "Papel de parede",
+    "vpn": "VPN",
+    "energia": "Modo de energia",
+    "replay": "Replay instantâneo",
+    "projeto": "Sessão de projeto",
+    "banco": "Banco do Dev Hub",
+    "abrir": "Abrir um app",
+    "notificar": "Mostrar um aviso",
+    "comando": "Rodar um comando",
+}
+
+MODELOS = [
+    {"nome": "Fone conectado: perfil de música", "quando": {"tipo": "dispositivo_conectado", "aparelho": "som", "nome": ""},
+     "fazer": [{"tipo": "perfil_som", "perfil": "Música"}]},
+    {"nome": "Jogo aberto: replay e não perturbe", "quando": {"tipo": "jogo_comecou"},
+     "fazer": [{"tipo": "replay", "ligar": True}, {"tipo": "nao_perturbe", "ligar": True}]},
+    {"nome": "Jogo fechado: replay desligado", "quando": {"tipo": "jogo_terminou"},
+     "fazer": [{"tipo": "replay", "ligar": False}, {"tipo": "nao_perturbe", "ligar": False}]},
+    {"nome": "Noite: luz azul às 21h", "quando": {"tipo": "horario", "hora": "21:00", "dias": []},
+     "fazer": [{"tipo": "luz_azul", "ligar": True, "temperatura": 4000}]},
+    {"nome": "Manhã: luz azul desligada às 7h", "quando": {"tipo": "horario", "hora": "07:00", "dias": []},
+     "fazer": [{"tipo": "luz_azul", "ligar": False}]},
+    {"nome": "Rede pública: ligar a VPN", "quando": {"tipo": "rede_conectou", "nome": ""},
+     "fazer": [{"tipo": "vpn", "ligar": True, "vpn": ""}]},
+    {"nome": "Discord no fone", "quando": {"tipo": "app_abriu", "app": "discord"},
+     "fazer": [{"tipo": "saida_app", "app": "discord", "saida": ""}]},
+    {"nome": "Memória quase cheia: avisar", "quando": {"tipo": "ram_alta", "limite": 90},
+     "fazer": [{"tipo": "notificar", "texto": "A memória está quase cheia. Feche o que não estiver usando."}]},
+    {"nome": "Bateria do controle baixa: avisar", "quando": {"tipo": "bateria_baixa", "limite": 20, "nome": ""},
+     "fazer": [{"tipo": "notificar", "texto": "A bateria do aparelho está acabando."}]},
+    {"nome": "Começo do trabalho: abrir o projeto", "quando": {"tipo": "horario", "hora": "09:00", "dias": [1, 2, 3, 4, 5]},
+     "fazer": [{"tipo": "projeto", "abrir": True, "projeto": ""}, {"tipo": "energia", "perfil": "desempenho"}]},
+]
+
+
+def ler(p, padrao):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return padrao
+
+
+def gravar(p, dados):
+    p = Path(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)     # o shell observa o arquivo: troca de uma vez, nunca pela metade
+
+
+def automacoes():
+    return ler(CONFIG, {}).get("automacoes", [])
+
+
+def rodar(cmd, timeout=60, entrada=None):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=entrada)
+        return r.returncode, r.stdout, r.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, "", str(e)
+
+
+def json_de(cmd, padrao):
+    c, s, _ = rodar(cmd, timeout=15)
+    try:
+        return json.loads(s) if c == 0 and s.strip() else padrao
+    except ValueError:
+        return padrao
+
+
+# ------------------------------------------------------------------ opções para o editor
+def opcoes():
+    som = json_de([L + "nyxz-audio", "estado"], {})
+    vpns = json_de([L + "rede", "estado"], {}).get("vpns", [])
+    projetos = ler(CASA / ".config/nyxz/dev/projetos.json", [])
+    bancos = ler(CASA / ".config/nyxz/dev/bancos.json", [])
+    return {
+        "perfis": som.get("perfis", []),
+        "saidas": [{"nome": s["nome"], "descricao": s["descricao"]} for s in som.get("saidas", [])],
+        "vpns": [{"nome": v["nome"], "uuid": v["uuid"]} for v in vpns],
+        "projetos": [p.get("nome") for p in projetos if p.get("nome")],
+        "bancos": [b.get("nome") for b in bancos if b.get("nome")],
+    }
+
+
+def listar():
+    print(json.dumps({"automacoes": automacoes(), "modelos": MODELOS, "gatilhos": GATILHOS, "acoes": ACOES,
+                      "opcoes": opcoes(), "historico": ler(HISTORICO, [])[:30]}, ensure_ascii=False))
+
+
+def salvar():
+    nova = json.loads(sys.stdin.read() or "{}")
+    if nova.get("quando", {}).get("tipo") not in GATILHOS:
+        sys.exit("Escolha quando a automação acontece.")
+    if not nova.get("fazer"):
+        sys.exit("Adicione pelo menos uma ação.")
+    if any(a.get("tipo") not in ACOES for a in nova["fazer"]):
+        sys.exit("Ação desconhecida.")
+    if nova["quando"]["tipo"] == "horario" and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", nova["quando"].get("hora", "")):
+        sys.exit("Horário inválido (use HH:MM, ex.: 21:30).")
+    nova["nome"] = (nova.get("nome") or "").strip() or GATILHOS[nova["quando"]["tipo"]]
+    nova.setdefault("ligada", True)
+    lista = automacoes()
+    if not nova.get("id"):
+        nova["id"] = secrets.token_hex(4)
+        lista.append(nova)
+    else:
+        lista = [nova if a.get("id") == nova["id"] else a for a in lista]
+        if not any(a.get("id") == nova["id"] for a in automacoes()):
+            lista.append(nova)
+    gravar(CONFIG, {"automacoes": lista})
+    print(nova["id"])
+
+
+def mudar(id_, fn):
+    lista = automacoes()
+    if not any(a.get("id") == id_ for a in lista):
+        sys.exit("Automação não encontrada.")
+    gravar(CONFIG, {"automacoes": fn(lista)})
+
+
+# ------------------------------------------------------------------ ações
+def saida_app(app, saida):
+    """Manda o som de um app para uma saída. O app precisa estar tocando algo: espera até 60 s."""
+    app = app.lower()
+    for _ in range(30):
+        objetos = json_de(["pw-dump"], [])
+        achados = []
+        for o in objetos:
+            p = o.get("info", {}).get("props", {}) if o.get("type") == "PipeWire:Interface:Node" else {}
+            if p.get("media.class") == "Stream/Output/Audio":
+                nomes = " ".join(str(p.get(k, "")) for k in ("application.name", "application.process.binary",
+                                                              "application.id", "node.name")).lower()
+                if app in nomes:
+                    achados.append(o["id"])
+        if achados:
+            for id_ in achados:
+                rodar([L + "nyxz-audio", "saida-app", str(id_), saida])
+            return
+        time.sleep(2)
+    raise RuntimeError(f"o app \"{app}\" não tocou som em 1 minuto")
+
+
+def acao(a):
+    t = a.get("tipo")
+    liga = bool(a.get("ligar", True))
+    if t == "perfil_som":
+        cmd = [L + "nyxz-audio", "perfil", "aplicar", a.get("perfil", "")]
+    elif t == "saida_app":
+        return saida_app(a.get("app", ""), a.get("saida", ""))
+    elif t == "volume":
+        cmd = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{int(a.get('valor', 50)) / 100:.2f}"]
+    elif t == "nao_perturbe":
+        cmd = ["qs", "-c", "nyxz", "ipc", "call", "notificacoes", "definir", "true" if liga else "false"]
+    elif t == "luz_azul":
+        cmd = [L + "luz-azul", "ligar", str(int(a.get("temperatura", 4500)))] if liga else [L + "luz-azul", "desligar"]
+    elif t == "brilho":
+        telas = json_de([L + "brilho", "listar"], [])
+        for tela in telas:
+            rodar([L + "brilho", "definir", str(tela["id"]), str(int(a.get("valor", 50)))])
+        return
+    elif t == "wallpaper":
+        cmd = [L + "papel-de-parede", "definir", os.path.expanduser(a.get("arquivo", ""))]
+    elif t == "vpn":
+        if liga:
+            cmd = [L + "rede", "vpn", "ligar", a["vpn"]] if a.get("vpn") else [L + "rede", "vpn", "alternar"]
+        else:
+            ligadas = [v["uuid"] for v in json_de([L + "rede", "estado"], {}).get("vpns", []) if v.get("ligada")]
+            for u in ligadas:
+                rodar([L + "rede", "vpn", "desligar", u])
+            return
+    elif t == "energia":
+        perfil = {"economia": "power-saver", "equilibrado": "balanced", "desempenho": "performance"}.get(a.get("perfil"), "balanced")
+        cmd = ["powerprofilesctl", "set", perfil]
+    elif t == "replay":
+        cmd = [L + "replay", "ligar" if liga else "desligar"]
+    elif t == "projeto":
+        cmd = [L + "nyxz-dev", "projetos", "abrir" if a.get("abrir", True) else "fechar", a.get("projeto", "")]
+    elif t == "banco":
+        cmd = [L + "nyxz-dev", "bancos", "iniciar" if liga else "parar", a.get("banco", "")]
+    elif t == "abrir":
+        partes = shlex.split(a.get("app", ""))
+        if not partes:
+            raise RuntimeError("nenhum app escolhido")
+        subprocess.Popen(["nyx", "run", *partes], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    elif t == "notificar":
+        cmd = ["notify-send", "-a", "Nyxz", "-i", "system-run", a.get("titulo") or "Automação", a.get("texto", "")]
+    elif t == "comando":
+        # Num escopo próprio do systemd: aparece nas Estatísticas e não trava o shell
+        cmd = ["systemd-run", "--user", "--collect", "--quiet", "--unit", f"nyxz-automacao-{secrets.token_hex(3)}",
+               "sh", "-c", a.get("comando", "")]
+    else:
+        raise RuntimeError("ação desconhecida")
+    c, s, e = rodar(cmd, timeout=120)
+    if c != 0:
+        raise RuntimeError((e or s).strip()[-200:] or f"falhou ({c})")
+
+
+def executar(auto, motivo):
+    erros = []
+    for a in auto.get("fazer", []):
+        try:
+            acao(a)
+        except Exception as e:      # uma ação que falha não impede as outras
+            erros.append(f"{ACOES.get(a.get('tipo'), a.get('tipo'))}: {e}")
+    hist = ler(HISTORICO, [])
+    hist.insert(0, {"quando": datetime.datetime.now().isoformat(timespec="seconds"), "id": auto.get("id", ""),
+                    "nome": auto.get("nome", ""), "motivo": motivo, "ok": not erros, "erros": erros})
+    gravar(HISTORICO, hist[:100])
+    if erros:
+        subprocess.run(["notify-send", "-a", "Nyxz", "-i", "dialog-warning", f"Automação \"{auto.get('nome', '')}\"",
+                        "Não deu certo: " + "; ".join(erros)], check=False)
+        sys.exit("; ".join(erros))
+
+
+# ------------------------------------------------------------------ dispositivos e baterias
+def dispositivos():
+    out = []
+    # Teclados, mouses, controles e fones Bluetooth (botões de mídia aparecem como entrada)
+    try:
+        blocos = Path("/proc/bus/input/devices").read_text(errors="replace").split("\n\n")
+    except OSError:
+        blocos = []
+    vistos = set()
+    for b in blocos:
+        nome = re.search(r'^N: Name="(.*)"', b, re.M)
+        fis = re.search(r"^P: Phys=(.*)$", b, re.M)
+        h = re.search(r"^H: Handlers=(.*)$", b, re.M)
+        if not nome or not h:
+            continue
+        nome, handlers, phys = nome.group(1), h.group(1), fis.group(1) if fis else ""
+        if not phys or phys.startswith(("isa", "LNX", "PNP")) or re.search(r"Button|Video Bus|PC Speaker", nome):
+            continue   # botões internos do PC
+        # Controle de verdade: tem botões de joystick/gamepad (0x120–0x13f), não só o js*
+        # (tablets e mesas digitalizadoras também ganham js)
+        teclas = re.search(r"^B: KEY=(.*)$", b, re.M)
+        bits = int("".join(w.zfill(16) for w in teclas.group(1).split()), 16) if teclas else 0
+        joystick = re.search(r"\bjs\d", handlers) and any(bits >> n & 1 for n in range(0x120, 0x140))
+        tipo = "controle" if joystick else "som" if re.search(r"AVRCP|Headset|Headphone|Fone", nome, re.I) else "outro"
+        if (tipo, nome) not in vistos:
+            vistos.add((tipo, nome))
+            out.append({"tipo": tipo, "nome": nome})
+    # Placas de som (fones e caixas USB)
+    try:
+        for l in Path("/proc/asound/cards").read_text().splitlines():
+            m = re.match(r"\s*\d+ \[[^\]]*\]: (\S+) - (.*)", l)
+            if m and m.group(1).startswith("USB"):
+                out.append({"tipo": "som", "nome": m.group(2).strip()})
+    except OSError:
+        pass
+    # Fones e caixas Bluetooth conectados
+    c, s, _ = rodar(["bluetoothctl", "devices", "Connected"], timeout=5)
+    for l in s.splitlines() if c == 0 else []:
+        partes = l.split(" ", 2)
+        if len(partes) == 3:
+            out.append({"tipo": "som" if "audio" in bt_info(partes[1]).get("Icon", "") else "outro", "nome": partes[2]})
+    # Pendrives e HDs externos
+    for d in json_de(["lsblk", "-J", "-d", "-o", "NAME,TRAN,MODEL,VENDOR,HOTPLUG"], {}).get("blockdevices", []):
+        if d.get("tran") == "usb" or d.get("hotplug") in (True, "1"):
+            out.append({"tipo": "pendrive", "nome": " ".join(x for x in (d.get("vendor"), d.get("model")) if x).strip() or d["name"]})
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def bt_info(mac):
+    c, s, _ = rodar(["bluetoothctl", "info", mac], timeout=5)
+    info = {}
+    for l in s.splitlines():
+        k, _, v = l.strip().partition(": ")
+        info[k] = v
+    return info
+
+
+def baterias():
+    out = []
+    for ps in Path("/sys/class/power_supply").glob("*"):
+        try:
+            if (ps / "scope").read_text().strip() != "Device":
+                continue
+            cap = int((ps / "capacity").read_text().strip())
+        except (OSError, ValueError):
+            continue
+        try:
+            nome = (ps / "model_name").read_text().strip()
+        except OSError:
+            nome = ps.name
+        out.append({"nome": nome, "bateria": cap})
+    c, s, _ = rodar(["bluetoothctl", "devices", "Connected"], timeout=5)
+    for l in s.splitlines() if c == 0 else []:
+        partes = l.split(" ", 2)
+        if len(partes) == 3:
+            m = re.search(r"\((\d+)\)", bt_info(partes[1]).get("Battery Percentage", ""))
+            if m and not any(b["nome"] == partes[2] for b in out):
+                out.append({"nome": partes[2], "bateria": int(m.group(1))})
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "listar":
+        listar()
+    elif a == ["salvar"]:
+        salvar()
+    elif a[0] == "remover" and len(a) == 2:
+        mudar(a[1], lambda l: [x for x in l if x.get("id") != a[1]])
+    elif a[0] == "ligar" and len(a) == 3:
+        mudar(a[1], lambda l: [{**x, "ligada": a[2] == "sim"} if x.get("id") == a[1] else x for x in l])
+    elif a[0] == "executar" and len(a) in (2, 3):
+        auto = next((x for x in automacoes() if x.get("id") == a[1]), None)
+        if not auto:
+            sys.exit("Automação não encontrada.")
+        executar(auto, a[2] if len(a) == 3 else "")
+    elif a == ["testar"]:
+        executar(json.loads(sys.stdin.read() or "{}"), "teste")
+    elif a == ["dispositivos"]:
+        dispositivos()
+    elif a == ["baterias"]:
+        baterias()
+    else:
+        sys.exit("uso: automacoes listar|salvar|remover <id>|ligar <id> sim|nao|executar <id> [motivo]|testar|dispositivos|baterias")
+
+
+if __name__ == "__main__":
+    main()

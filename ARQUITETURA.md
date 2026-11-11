@@ -242,7 +242,7 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Snapshots | Snapper na pasta pessoal (Btrfs) + "Versões anteriores" no Dolphin | 🟡 |
 | Backup | restic + rclone, timer | 🟢 |
 | Nyxz Sync | Repositório Git privado + lista de bloqueio + verificação de segredos | 🟢 |
-| Automações | Motor no shell, gatilhos pelo `nyxz-scoped`, ações pelos serviços | 🟡 |
+| Automações | Motor no shell (`Automacoes.qml`: Hyprland, Modo jogo, udev, conferência a cada 20 s) + ações em `/usr/libexec/nyxz/automacoes` | ✅ |
 | Congelar apps | `cgroup.freeze` nos escopos com as exceções da seção 3.4 | 🟡 |
 | Modo streamer | Detecção de captura + regras de ocultar no shell | 🟡 |
 | Nyxz Doctor | `/usr/libexec/nyxz/doctor` (Python, só com a página aberta) + `nyxz-doctor-root` (pkexec) + página nas Configurações | ✅ |
