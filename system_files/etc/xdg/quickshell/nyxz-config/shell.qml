@@ -17,6 +17,7 @@ ShellRoot {
         { id: "telas", nome: "Telas" },
         { id: "teclado", nome: "Teclado e mouse" },
         { id: "controles", nome: "Controles" },
+        { id: "celular", nome: "Celular" },
         { id: "aparencia", nome: "Aparência" },
         { id: "ajustes", nome: "Ajustes" },
         { id: "regras", nome: "Regras de janela" },
@@ -163,7 +164,7 @@ ShellRoot {
                         opacity: ativa ? 1 : 0
                         source: {
                             const mapa = { rede: "PaginaRede.qml", vpn: "PaginaVpn.qml", lan: "PaginaLan.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
-                                           teclado: "PaginaTeclado.qml", controles: "PaginaControles.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", automacoes: "PaginaAutomacoes.qml", congelar: "PaginaCongelar.qml", streamer: "PaginaStreamer.qml", instancias: "PaginaInstancias.qml", sync: "PaginaSync.qml", windows: "PaginaWindows.qml", componentes: "PaginaComponentes.qml", estatisticas: "PaginaEstatisticas.qml", discos: "PaginaDiscos.qml", voltar: "PaginaVoltar.qml", backup: "PaginaBackup.qml", datahora: "PaginaDataHora.qml",
+                                           teclado: "PaginaTeclado.qml", controles: "PaginaControles.qml", celular: "PaginaCelular.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", automacoes: "PaginaAutomacoes.qml", congelar: "PaginaCongelar.qml", streamer: "PaginaStreamer.qml", instancias: "PaginaInstancias.qml", sync: "PaginaSync.qml", windows: "PaginaWindows.qml", componentes: "PaginaComponentes.qml", estatisticas: "PaginaEstatisticas.qml", discos: "PaginaDiscos.qml", voltar: "PaginaVoltar.qml", backup: "PaginaBackup.qml", datahora: "PaginaDataHora.qml",
                                            atualizacoes: "PaginaAtualizacoes.qml", doctor: "PaginaDoctor.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];
                         }

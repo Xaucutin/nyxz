@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Capturar a tela
+GenericName=Captura de tela
+Comment=Escolha uma área para capturar e anotar (atalho: Print)
+Exec=/usr/libexec/nyxz/captura area --editar
+Icon=applets-screenshooter
+Categories=Utility;Graphics;
+Keywords=print;captura;screenshot;printscreen;recorte;anotar;

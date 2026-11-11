@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Notifications
+import Quickshell.Hyprland
 
 // Servidor de notificações da Nyxz: cartões no canto superior direito.
 Scope {
@@ -22,9 +23,13 @@ Scope {
         }
     }
 
+    // Não perturbe por espaço (Configurações → Espaços): escondidas aqui, aparecem ao sair dele
+    readonly property int espacoAtual: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 0
+    function silenciada(n) { return Espacos.silenciado(raiz.espacoAtual, n.appName || n.desktopEntry || ""); }
+
     PanelWindow {
         id: janela
-        visible: servidor.trackedNotifications.values.length > 0 && !Estado.naoPerturbe
+        visible: servidor.trackedNotifications.values.some(n => !raiz.silenciada(n)) && !Estado.naoPerturbe
         // Ajuste "canto das notificações": superior-direito, superior-esquerdo,
         // inferior-direito ou inferior-esquerdo.
         readonly property string canto: Ajustes.cantoNotificacoes
@@ -58,6 +63,8 @@ Scope {
                     id: cartao
                     required property var modelData
                     readonly property bool critica: modelData.urgency === NotificationUrgency.Critical
+                    readonly property bool escondida: raiz.silenciada(modelData)
+                    visible: !escondida
                     width: coluna.width
                     implicitHeight: conteudo.implicitHeight + 24
                     radius: Tema.raioPainel
@@ -78,7 +85,7 @@ Scope {
 
                     // Some sozinha depois de 6 s (as críticas ficam até serem fechadas).
                     Timer {
-                        running: !cartao.critica && !areaCartao.containsMouse
+                        running: !cartao.critica && !areaCartao.containsMouse && !cartao.escondida && !Estado.naoPerturbe
                         interval: 6000
                         onTriggered: cartao.modelData.expire()
                     }

@@ -79,3 +79,13 @@ rclone
 gh
 ntfs-3g
 efibootmgr
+# Captura de tela, texto da tela (OCR), anotação e gravação
+grim
+slurp
+satty
+swappy
+tesseract
+tesseract-langpack-por
+tesseract-langpack-eng
+wf-recorder
+ffmpeg

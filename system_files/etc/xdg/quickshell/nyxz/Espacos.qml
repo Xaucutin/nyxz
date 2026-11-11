@@ -17,7 +17,7 @@ Singleton {
         onFileChanged: reload()
         JsonAdapter {
             id: cfg
-            property var espacos: []   // [{ numero, nome, papel }]
+            property var espacos: []   // [{ numero, nome, papel, silencio, apps }]
         }
     }
 
@@ -27,6 +27,14 @@ Singleton {
     function nome(numero) {
         const e = de(numero);
         return e && e.nome ? e.nome : "";
+    }
+    // Não perturbe por espaço: "tudo" silencia todas; "apps" só as dos apps listados
+    function silenciado(numero, app) {
+        const e = de(numero);
+        if (!e || !e.silencio || e.silencio === "nenhum") return false;
+        if (e.silencio === "tudo") return true;
+        const a = String(app || "").toLowerCase();
+        return !!a && String(e.apps || "").split(",").map(x => x.trim().toLowerCase()).some(x => x && a.indexOf(x) >= 0);
     }
     function papel(numero) {
         const e = de(numero);

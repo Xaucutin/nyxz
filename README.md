@@ -107,6 +107,14 @@ Também feitos: **Voltar no tempo** (Configurações → Voltar no tempo, ou no 
 
 **Várias instâncias** (Configurações → Várias instâncias, ou botão direito na tarefa → "Outra instância"): perfis com dados e login próprios para Brave, Chrome, Chromium, Firefox, Vesktop, Discord, VS Code, Telegram, Obsidian e Slack (nativos ou Flatpak), ou uma cópia temporária apagada ao fechar. Spotify e Steam aparecem como não suportados. Conferido na VM com o foot (modo experimental, pastas XDG próprias): perfil permanente e temporário apagado ao fechar. Falta conferir com os navegadores e o Vesktop.
 
+**Captura de tela** (`/usr/libexec/nyxz/captura`, nada fica rodando): Print captura uma área, Shift+Print a tela inteira, Alt+Print a janela em foco; salva em Imagens/Capturas, copia e avisa com "Editar" (anotar, setas, texto e desfoque no swappy/satty) e "Abrir a pasta". Super+Shift+S captura e já abre o editor. **Texto da tela (OCR):** Super+Shift+T copia o texto de um pedaço da tela (Tesseract, português e inglês). **Conta-gotas:** Super+Shift+C copia a cor em HEX e mostra RGB e HSL. **Régua:** Super+Shift+M mede um retângulo em pixels. **Gravar a tela:** Super+Shift+R grava uma área (de novo para parar; pílula "gravando" na barra), sem som por padrão; também em GIF pela busca. Tudo também aparece na busca e na cola de atalhos. Conferido na VM: captura copiada como imagem, OCR lendo "Ação, coração e pão" com acentos, cor e régua copiadas, vídeo e GIF salvos.
+
+**Não perturbe por espaço** (Configurações → Espaços): cada área de trabalho pode mostrar todas as notificações, nenhuma ou silenciar alguns apps (ex.: Discord no espaço "Código"). As silenciadas ficam guardadas e aparecem quando você sai daquele espaço. Também mudou: com o não perturbe ligado (ou o modo streamer), as notificações não expiram mais escondidas; aparecem quando ele desliga. Conferido na VM.
+
+**Celular (KDE Connect)** (Apps e componentes → "Celular integrado", desmarcado no Sugerido; Configurações → Celular): liga e desliga o `kdeconnectd` (~57 MB só enquanto ligado, serviço `nyxz-celular`), pareia o Android, mostra a bateria, faz o celular tocar, manda arquivos, links e o que está copiado. As notificações do celular chegam pelo servidor de notificações da Nyxz. Conferido na VM: instalar, ligar e desligar o serviço. Falta conferir com um celular de verdade.
+
+**Fase 6 concluída no código.** Pendentes dela (dependem de hardware, contas ou pessoas): SMART/NVMe e RAPL reais, Google Drive e HD externo no backup, conta do GitHub no Sync, Windows de verdade no dual boot, OBS/Discord ligando o modo streamer, apps reais no congelar e nas instâncias, celular no KDE Connect.
+
 ## Ferramentas de desenvolvimento
 
 - `tools/dev-servidor.py`: serve o shell, o login e as Configurações em `http://127.0.0.1/` (na VM: `10.0.2.2`). Na VM, `nyx dev` baixa o shell e reinicia; `nyx dev limpar` volta ao da imagem.

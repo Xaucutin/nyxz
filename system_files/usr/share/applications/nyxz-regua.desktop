@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Régua
+GenericName=Medir na tela
+Comment=Arraste para medir largura e altura em pixels (Super+Shift+M)
+Exec=/usr/libexec/nyxz/captura regua
+Icon=measure
+Categories=Utility;Graphics;
+Keywords=regua;medir;pixels;tamanho;dimensao;

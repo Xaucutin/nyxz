@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Conta-gotas
+GenericName=Copiar uma cor da tela
+Comment=Clique num ponto da tela e copie a cor em HEX, RGB e HSL (Super+Shift+C)
+Exec=/usr/libexec/nyxz/captura cor
+Icon=color-select
+Categories=Utility;Graphics;
+Keywords=cor;conta-gotas;hex;rgb;hsl;picker;eyedropper;

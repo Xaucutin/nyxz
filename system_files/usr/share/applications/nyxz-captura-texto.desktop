@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Copiar texto da tela
+GenericName=Reconhecer texto (OCR)
+Comment=Escolha uma área e copie o texto que estiver nela (Super+Shift+T)
+Exec=/usr/libexec/nyxz/captura texto
+Icon=edit-copy
+Categories=Utility;
+Keywords=ocr;texto;copiar;reconhecer;imagem;tesseract;

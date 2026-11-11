@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.SystemTray
@@ -266,6 +267,39 @@ PanelWindow {
                 }
                 // Clique salva os últimos segundos (o mesmo que Alt+F10)
                 MouseArea { id: areaReplay; anchors.fill: parent; hoverEnabled: true; onClicked: JogoEstado.salvarReplay() }
+            }
+            // Gravando a tela (Super+Shift+R): clique para parar
+            Rectangle {
+                id: pilulaGravando
+                property bool ativo: false
+                visible: ativo
+                Layout.preferredWidth: rotuloGravando.implicitWidth + 24
+                Layout.preferredHeight: 24
+                Layout.rightMargin: 4
+                radius: 12
+                color: areaGravando.containsMouse ? Tema.hover : Tema.elevado
+                border.width: 1
+                border.color: Tema.borda
+                FileView {
+                    id: marcaGravando
+                    path: Quickshell.env("XDG_RUNTIME_DIR") + "/nyxz-gravando.json"
+                    printErrors: false
+                    onLoaded: pilulaGravando.ativo = true
+                    onLoadFailed: pilulaGravando.ativo = false
+                }
+                Timer { interval: 1500; running: true; repeat: true; onTriggered: marcaGravando.reload() }
+                Rectangle {
+                    x: 9; anchors.verticalCenter: parent.verticalCenter
+                    width: 6; height: 6; radius: 3
+                    color: Tema.erro
+                }
+                Text {
+                    id: rotuloGravando
+                    x: 19; anchors.verticalCenter: parent.verticalCenter
+                    text: "gravando"
+                    font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto2
+                }
+                MouseArea { id: areaGravando; anchors.fill: parent; hoverEnabled: true; onClicked: Quickshell.execDetached(["/usr/libexec/nyxz/captura", "parar"]) }
             }
             // Modo streamer ativo: clique desliga
             Rectangle {

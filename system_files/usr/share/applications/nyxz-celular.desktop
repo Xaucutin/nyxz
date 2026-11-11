@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Celular
+GenericName=KDE Connect
+Comment=Notificações, arquivos e área de transferência com o celular Android
+Exec=/usr/libexec/nyxz/configuracoes celular
+Icon=smartphone
+Categories=System;Settings;
+Keywords=celular;android;kde connect;telefone;sms;arquivos;

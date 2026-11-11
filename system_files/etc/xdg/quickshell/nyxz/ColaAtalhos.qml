@@ -39,6 +39,16 @@ PanelWindow {
             ["Super", "Shift + 1 a 5", "Levar a janela para a área de trabalho"],
             ["Super", "rolar o mouse", "Área de trabalho anterior ou seguinte"]
         ]},
+        { nome: "Captura de tela", itens: [
+            ["", "Print", "Capturar uma área (copia e salva)"],
+            ["Shift", "Print", "Capturar a tela inteira"],
+            ["Alt", "Print", "Capturar a janela em foco"],
+            ["Super", "Shift + S", "Capturar uma área e anotar ou desfocar"],
+            ["Super", "Shift + T", "Copiar o texto de um pedaço da tela"],
+            ["Super", "Shift + C", "Conta-gotas: copiar uma cor"],
+            ["Super", "Shift + M", "Régua: medir em pixels"],
+            ["Super", "Shift + R", "Gravar a tela (de novo para parar)"]
+        ]},
         { nome: "Som e mídia", itens: [
             ["", "Teclas de volume", "Aumentar, diminuir e silenciar"],
             ["", "Tecla do microfone", "Silenciar o microfone"],

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Gravar GIF da tela
+GenericName=Gravação em GIF
+Comment=Grava uma área da tela em GIF; de novo para parar
+Exec=/usr/libexec/nyxz/captura gravar area --gif
+Icon=media-record
+Categories=Utility;AudioVideo;
+Keywords=gif;gravar;animacao;tela;

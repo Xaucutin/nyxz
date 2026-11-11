@@ -8,7 +8,7 @@ import Quickshell.Io
 Pagina {
     id: p
     titulo: "Espaços"
-    descricao: "Dê nome às áreas de trabalho (ex.: Código, Jogos, Estudo) e, se quiser, um papel de parede para cada uma. O nome aparece na barra no lugar do número."
+    descricao: "Dê nome às áreas de trabalho (ex.: Código, Jogos, Estudo) e, se quiser, um papel de parede e um não perturbe para cada uma (ex.: sem Discord no espaço de código). O nome aparece na barra no lugar do número."
 
     property var papeis: []
 
@@ -38,7 +38,7 @@ Pagina {
         const lista = cfg.espacos.filter(x => x.numero !== numero);
         const atual = Object.assign({ numero: numero, nome: "", papel: "" }, cfg.espacos.find(x => x.numero === numero) || {});
         atual[chave] = v;
-        if (atual.nome || atual.papel) lista.push(atual);
+        if (atual.nome || atual.papel || (atual.silencio && atual.silencio !== "nenhum")) lista.push(atual);
         lista.sort((a, b) => a.numero - b.numero);
         cfg.espacos = lista;
     }
@@ -97,6 +97,58 @@ Pagina {
                                 font: campo.font
                                 color: Tema.texto4
                             }
+                        }
+                    }
+                }
+
+                // Não perturbe por espaço
+                Text {
+                    text: "Notificações neste espaço"
+                    font.family: Tema.fonte; font.pixelSize: 11; color: Tema.texto3
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: [{ t: "Todas", v: "nenhum" }, { t: "Nenhuma", v: "tudo" }, { t: "Silenciar alguns apps", v: "apps" }]
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool marcado: (p.valor(cartao.numero, "silencio") || "nenhum") === modelData.v
+                            implicitWidth: rotuloSil.implicitWidth + 20
+                            implicitHeight: 26
+                            radius: 13
+                            color: marcado ? Tema.selecionado : areaSil.containsMouse ? Tema.hover : "transparent"
+                            border.width: 1
+                            border.color: marcado ? Tema.bordaPainel : Tema.borda
+                            Text { id: rotuloSil; anchors.centerIn: parent; text: parent.modelData.t; font.family: Tema.fonte; font.pixelSize: 12; color: parent.marcado ? Tema.texto : Tema.texto2 }
+                            MouseArea { id: areaSil; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: p.definir(cartao.numero, "silencio", parent.modelData.v) }
+                        }
+                    }
+                }
+                Rectangle {
+                    visible: p.valor(cartao.numero, "silencio") === "apps"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    radius: Tema.raio
+                    color: Tema.painel
+                    border.width: 1
+                    border.color: campoApps.activeFocus ? Tema.texto4 : Tema.borda
+                    TextInput {
+                        id: campoApps
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        verticalAlignment: TextInput.AlignVCenter
+                        text: p.valor(cartao.numero, "apps")
+                        font.family: Tema.fonte; font.pixelSize: 13; color: Tema.texto
+                        clip: true
+                        onEditingFinished: p.definir(cartao.numero, "apps", text.trim())
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: campoApps.text.length === 0
+                            text: "Apps silenciados aqui, separados por vírgula (ex.: discord, vesktop)"
+                            font: campoApps.font
+                            color: Tema.texto4
                         }
                     }
                 }

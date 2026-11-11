@@ -125,6 +125,16 @@ tentar(function() hl.bind("ALT + F10", hl.dsp.exec_cmd("/usr/libexec/nyxz/replay
 tentar(function() hl.bind("ALT + SHIFT + F10", hl.dsp.exec_cmd("/usr/libexec/nyxz/replay alternar")) end)
 -- Painel rápido (brilho e luz azul)
 tentar(function() hl.bind(mod .. " + B", hl.dsp.exec_cmd("qs -c nyxz ipc call rapido alternar")) end)
+-- Captura de tela, texto (OCR), conta-gotas, régua e gravação (/usr/libexec/nyxz/captura)
+local cap = "/usr/libexec/nyxz/captura "
+tentar(function() hl.bind("Print", hl.dsp.exec_cmd(cap .. "area")) end)
+tentar(function() hl.bind("SHIFT + Print", hl.dsp.exec_cmd(cap .. "tela")) end)
+tentar(function() hl.bind("ALT + Print", hl.dsp.exec_cmd(cap .. "janela")) end)
+tentar(function() hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(cap .. "area --editar")) end)
+tentar(function() hl.bind(mod .. " + SHIFT + T", hl.dsp.exec_cmd(cap .. "texto")) end)
+tentar(function() hl.bind(mod .. " + SHIFT + C", hl.dsp.exec_cmd(cap .. "cor")) end)
+tentar(function() hl.bind(mod .. " + SHIFT + M", hl.dsp.exec_cmd(cap .. "regua")) end)
+tentar(function() hl.bind(mod .. " + SHIFT + R", hl.dsp.exec_cmd(cap .. "gravar area")) end)
 hl.bind(mod .. " + Q",      hl.dsp.window.close())
 hl.bind(mod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mod .. " + SHIFT + E",

@@ -412,6 +412,21 @@
       ],
       "padrao": true,
       "tamanho_mb": 40
+    },
+    {
+      "id": "celular",
+      "categoria": "comunicacao",
+      "nome": "Celular integrado (KDE Connect)",
+      "descricao": "Notificações do celular Android no PC, área de transferência compartilhada, enviar arquivos nos dois sentidos, controle de mídia e achar o celular. Só fica rodando (~30–50 MB) quando ligado em Configurações → Celular.",
+      "tipo": "rpm",
+      "pacotes": [
+        "kde-connect"
+      ],
+      "comandos": [
+        "rm -f /etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop /etc/xdg/autostart/org.kde.kdeconnect.nonplasma.desktop /etc/xdg/autostart/org.kde.kdeconnect-indicator.desktop"
+      ],
+      "padrao": false,
+      "tamanho_mb": 60
     }
   ]
 }

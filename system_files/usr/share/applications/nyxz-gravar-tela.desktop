@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Gravar a tela
+GenericName=Gravação de tela
+Comment=Grava uma área da tela em vídeo; de novo para parar (Super+Shift+R)
+Exec=/usr/libexec/nyxz/captura gravar area
+Icon=media-record
+Categories=Utility;AudioVideo;
+Keywords=gravar;gravacao;video;tela;record;gif;
