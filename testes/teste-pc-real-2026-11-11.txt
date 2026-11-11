@@ -1,0 +1,98 @@
+TESTE DA NYXZ NO PC REAL
+Data: 11/11/2026
+Instalacao: ao lado do Windows (guia INSTALAR-NO-PC.md, 29 GB para a Nyxz)
+
+== INSTALACAO ==
+
+
+== BOOT / DUAL BOOT ==
+- Na inicializacao, NAO mostrar o terminal nem as mensagens do sistema
+  carregando (fica feio).
+- Mostrar so o icone NX da Nyxz animado, como se estivesse carregando,
+  ate tudo iniciar (tela de boot limpa, estilo Windows).
+
+
+== LOGIN E AREA DE TRABALHO ==
+- Tecla Windows/Super sozinha nao abre nada (a busca/navegacao so abre clicando no icone NX). Corrigir.
+- Alt+Tab nao funciona.
+- Os apps nativos da Nyxz (atalhos para partes das Configuracoes, ex.:
+  Automacoes, Backup, Capturar a tela, Celular, Configuracoes, Congelar
+  apps, Conta-gotas, Controles) nao tem icone: aparecem com o icone
+  quadriculado roxo e preto de "sem textura". Corrigir.
+- Workspaces 1,2,3,4,5 sao ruins de usar: devem ser OPCIONAIS.
+
+== JANELAS (MULTIPLOS APPS) ==
+- Nao consigo minimizar janelas.
+- Nao consigo deixar as janelas que quero em tela cheia (maximizar).
+- A maioria dos apps nao tem botoes de minimizar / maximizar / fechar.
+  Ex.: navegador sem botao de minimizar nem de maximizar.
+- Tela cheia deveria ser so "maximizar", nao a tela cheia do F11.
+- Spotify do sistema abre em tela cheia tipo F11 e nao consigo sair;
+  preciso fechar o app para sair. Horrivel.
+- Quero que o jeito de lidar com varias janelas abertas seja no estilo do
+  Windows 11. Do jeito atual parece que nao tenho controle.
+- Atalho nativo Super+D para minimizar tudo; apertar de novo volta tudo.
+- Ter que ir na barra de tarefas para fechar os apps e muito desconfortavel.
+  Ter o botao de fechar (e minimizar/maximizar) no topo de cada app, como
+  em qualquer app do Windows, e EXTREMAMENTE NECESSARIO.
+- Botoes padrao no topo de todo app (como no Windows):
+  Minimizar | Maximizar | Fechar
+  * Maximizar: se o app ja estiver maximizado, volta para o modo janela
+    normal (NAO flutuante).
+- Todos os apps devem, por obrigacao, iniciar em modo janela.
+- Cada app deve poder alternar entre 3 modos:
+  1) modo janela;
+  2) maximizado: ocupa a tela toda menos a barra de tarefas;
+  3) tela cheia estilo F11.
+- Poder fixar apps na barra de tarefas.
+
+== APPS PADRAO E TIPOS DE ARQUIVO ==
+- Poder escolher apps padrao (ex.: navegador padrao).
+- Poder configurar quais extensoes de arquivo abrem em qual app (ex.:
+  quais abrem no navegador padrao), e tudo mais que o Windows ja tem nisso.
+
+== ATALHOS ==
+- Adicionar opcao de atalhos nas Configuracoes.
+- Poder configurar atalhos de teclado (ex.: minimizar, maximizar janela).
+
+== CAPTURA DE TELA (PRINT) ==
+- Depois de tirar print, Ctrl+C deve copiar automaticamente.
+- Poder configurar o comportamento, ex.: ao apertar Ctrl+C, copiar e
+  fechar a tela do print.
+
+== AREA DE TRANSFERENCIA ==
+- Sistema de historico do Ctrl+C / Ctrl+V (como o Win+V do Windows).
+
+== APPS ==
+- Vencord e Spicetify aparecem como instalados, mas nenhum dos dois
+  funciona nos apps (Discord/Spotify).
+- Explorer (gerenciador de arquivos) sem opcao de tema: esta branco e com
+  visual ultrapassado. Precisa de tema escuro e visual moderno.
+  Se possivel, um Explorer com a estilizacao do Windows 10/11.
+- Sober (Roblox): ao abrir aparece "Permission Update Required" pedindo
+  para rodar no terminal:
+    flatpak override --user --filesystem=xdg-run/app/com.discordapp.Discord:create --filesystem=xdg-run/discord-ipc-0 --device=input org.vinegarhq.Sober
+  Ja deixar isso configurado de forma nativa no sistema.
+
+== TERMINAL ==
+- Terminal deve vir com sudo instalado e configurado.
+- Tentei instalar o Claude Code e nao consegui.
+- Adicionar opcao (no Nyxz Setup / componentes) de o Claude Code vir
+  instalado nativamente, com a interface e tudo pronto, ja que foi
+  dificil instalar na mao.
+- Permitir Ctrl+C / Ctrl+V no terminal sem precisar do Shift.
+
+== ICONES E FONTES ==
+- Instalar pacotes de icones, simbolos, emojis e tudo que o Windows ja tem.
+
+== REDE, SOM E TELA ==
+
+
+== DESEMPENHO (RAM / DISCO) ==
+
+
+== PROBLEMAS ENCONTRADOS ==
+(ver secoes acima)
+
+== OBSERVACOES GERAIS ==
+
