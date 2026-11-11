@@ -1,0 +1,10 @@
+[Unit]
+Description=Nyxz Sync: envia quando as configurações mudam
+
+[Path]
+PathChanged=%h/.config/nyxz
+PathChanged=%h/.config/hypr/nyxz
+Unit=nyxz-sync.service
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,211 @@
+#!/usr/bin/python3 -I
+# Várias instâncias do mesmo app: cada instância extra abre com a própria pasta de
+# perfil (dados e login separados), permanente ("Trabalho", "Pessoal") ou temporária
+# (abre limpa e é apagada ao fechar). Duas cópias com o MESMO perfil não existem de
+# propósito: corromperia os dados.
+#
+#   instancias listar                       JSON: apps compatíveis instalados e perfis
+#   instancias criar <app> <perfil>
+#   instancias abrir <app> <perfil>|--temporario
+#   instancias remover <app> <perfil>      apaga os dados do perfil
+import json
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+CASA = Path.home()
+BASE_NATIVO = CASA / ".local/share/nyxz/instancias"
+# tipo: como dar uma pasta própria ao app
+#   chromium/electron: --user-data-dir · vscode: + --extensions-dir · firefox: --profile
+#   telegram: -workdir · generico: pastas XDG próprias (experimental) · nao: não funciona
+APPS = {
+    "brave": {"nome": "Brave", "bin": ["brave-browser", "brave"], "flatpak": "com.brave.Browser", "tipo": "chromium"},
+    "chromium": {"nome": "Chromium", "bin": ["chromium-browser", "chromium"], "flatpak": "org.chromium.Chromium", "tipo": "chromium"},
+    "chrome": {"nome": "Google Chrome", "bin": ["google-chrome-stable", "google-chrome"], "flatpak": "com.google.Chrome", "tipo": "chromium"},
+    "vesktop": {"nome": "Vesktop", "bin": ["vesktop"], "flatpak": "dev.vencord.Vesktop", "tipo": "electron"},
+    "discord": {"nome": "Discord", "bin": ["discord", "Discord"], "flatpak": "com.discordapp.Discord", "tipo": "electron"},
+    "code": {"nome": "VS Code", "bin": ["code"], "flatpak": "com.visualstudio.code", "tipo": "vscode"},
+    "firefox": {"nome": "Firefox", "bin": ["firefox"], "flatpak": "org.mozilla.firefox", "tipo": "firefox"},
+    "telegram": {"nome": "Telegram", "bin": ["telegram-desktop", "Telegram"], "flatpak": "org.telegram.desktop", "tipo": "telegram"},
+    "obsidian": {"nome": "Obsidian", "bin": ["obsidian"], "flatpak": "md.obsidian.Obsidian", "tipo": "electron"},
+    "slack": {"nome": "Slack", "bin": ["slack"], "flatpak": "com.slack.Slack", "tipo": "electron"},
+    "spotify": {"nome": "Spotify", "bin": ["spotify"], "flatpak": "com.spotify.Client", "tipo": "nao",
+                "motivo": "o Spotify só aceita uma conta aberta por computador"},
+    "steam": {"nome": "Steam", "bin": ["steam"], "flatpak": "com.valvesoftware.Steam", "tipo": "nao",
+              "motivo": "a Steam e os jogos com anti-cheat só aceitam uma cópia"},
+    "foot": {"nome": "Terminal (foot)", "bin": ["foot"], "flatpak": "", "tipo": "generico"},
+}
+NOME_PERFIL = re.compile(r"^[\w À-ÿ-]{1,30}$")
+
+
+def flatpaks():
+    try:
+        s = subprocess.run(["flatpak", "list", "--app", "--columns=application"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        s = ""
+    return set(s.split())
+
+
+def instalado(a, fps):
+    """("nativo", binário) | ("flatpak", id) | None — prefere o nativo."""
+    for b in a["bin"]:
+        if shutil.which(b):
+            return ("nativo", b)
+    if a.get("flatpak") and a["flatpak"] in fps:
+        return ("flatpak", a["flatpak"])
+    return None
+
+
+def slug(perfil):
+    return re.sub(r"[^\w-]+", "-", perfil.strip()).strip("-").lower() or "perfil"
+
+
+def pasta_perfis(chave, forma):
+    if forma[0] == "flatpak":
+        # Dentro da pasta do próprio app: o Flatpak sempre deixa ele escrever ali
+        return CASA / ".var/app" / forma[1] / "nyxz-instancias"
+    return BASE_NATIVO / chave
+
+
+def perfis(chave, forma):
+    pasta = pasta_perfis(chave, forma)
+    if not pasta.is_dir():
+        return []
+    out = []
+    for d in sorted(pasta.iterdir()):
+        if d.is_dir() and not d.name.startswith("temporario-"):
+            meta = d / ".nyxz-perfil.json"
+            try:
+                nome = json.loads(meta.read_text(encoding="utf-8"))["nome"]
+            except (OSError, ValueError, KeyError):
+                nome = d.name
+            out.append({"nome": nome, "pasta": d.name})
+    return out
+
+
+def listar():
+    fps = flatpaks()
+    out = []
+    for chave, a in APPS.items():
+        forma = instalado(a, fps)
+        if not forma:
+            continue
+        out.append({"app": chave, "nome": a["nome"], "forma": forma[0], "tipo": a["tipo"],
+                    "suportado": a["tipo"] != "nao", "experimental": a["tipo"] == "generico",
+                    "motivo": a.get("motivo", ""), "perfis": perfis(chave, forma) if a["tipo"] != "nao" else []})
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def achar(chave):
+    a = APPS.get(chave)
+    if not a:
+        sys.exit("App sem suporte a várias instâncias.")
+    if a["tipo"] == "nao":
+        sys.exit(f"{a['nome']} não funciona com várias instâncias: {a['motivo']}.")
+    forma = instalado(a, flatpaks())
+    if not forma:
+        sys.exit(f"{a['nome']} não está instalado.")
+    return a, forma
+
+
+def criar(chave, perfil):
+    if not NOME_PERFIL.match(perfil):
+        sys.exit("Use um nome curto (letras, números, espaço e hífen).")
+    a, forma = achar(chave)
+    d = pasta_perfis(chave, forma) / slug(perfil)
+    if d.exists():
+        sys.exit("Já existe um perfil com esse nome.")
+    d.mkdir(parents=True)
+    (d / ".nyxz-perfil.json").write_text(json.dumps({"nome": perfil.strip()}, ensure_ascii=False), encoding="utf-8")
+    print(d.name)
+
+
+def comando(a, forma, d, perfil):
+    t = a["tipo"]
+    if t in ("chromium", "electron"):
+        args = [f"--user-data-dir={d}"]
+        if t == "chromium":
+            args.append(f"--class=nyxz-{slug(perfil)}")
+    elif t == "vscode":
+        args = ["--user-data-dir", str(d / "dados"), "--extensions-dir", str(d / "extensoes"), "--new-window"]
+    elif t == "firefox":
+        args = ["--profile", str(d), "--no-remote", "--new-instance"]
+    elif t == "telegram":
+        args = ["-many", "-workdir", str(d)]
+    else:
+        args = []
+    env = {}
+    if t == "generico":
+        env = {"XDG_CONFIG_HOME": str(d / "config"), "XDG_DATA_HOME": str(d / "dados"),
+               "XDG_CACHE_HOME": str(d / "cache"), "XDG_STATE_HOME": str(d / "estado")}
+        for v in env.values():
+            Path(v).mkdir(parents=True, exist_ok=True)
+    base = ["flatpak", "run", forma[1]] if forma[0] == "flatpak" else [forma[1]]
+    # Pastas XDG próprias valem no Flatpak também (passadas pelo --env)
+    if forma[0] == "flatpak" and env:
+        base = ["flatpak", "run", *[f"--env={k}={v}" for k, v in env.items()], forma[1]]
+        env = {}
+    return ["nyx", "run", *base, *args], env
+
+
+def abrir(chave, perfil):
+    a, forma = achar(chave)
+    pasta = pasta_perfis(chave, forma)
+    temporario = perfil == "--temporario"
+    if temporario:
+        d = pasta / f"temporario-{secrets.token_hex(3)}"
+        d.mkdir(parents=True)
+    else:
+        d = pasta / slug(perfil)
+        if not d.is_dir():
+            sys.exit("Esse perfil não existe.")
+    cmd, env = comando(a, forma, d, "temporário" if temporario else perfil)
+    ambiente = {**os.environ, **env}
+    if temporario:
+        # Um processo à parte espera o app fechar e apaga a pasta
+        subprocess.Popen([sys.executable, "-I", __file__, "_esperar", str(d), json.dumps(cmd), json.dumps(env)],
+                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.Popen(cmd, env=ambiente, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def esperar(pasta, cmd, env):
+    subprocess.run(json.loads(cmd), env={**os.environ, **json.loads(env)})
+    shutil.rmtree(pasta, ignore_errors=True)
+
+
+def remover(chave, perfil):
+    a = APPS.get(chave)
+    if not a:
+        sys.exit("App desconhecido.")
+    forma = instalado(a, flatpaks())
+    if not forma:
+        sys.exit(f"{a['nome']} não está instalado.")
+    d = pasta_perfis(chave, forma) / slug(perfil)
+    if not d.is_dir() or d.parent != pasta_perfis(chave, forma):
+        sys.exit("Esse perfil não existe.")
+    shutil.rmtree(d)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "listar":
+        listar()
+    elif a[0] == "criar" and len(a) == 3:
+        criar(a[1], a[2])
+    elif a[0] == "abrir" and len(a) == 3:
+        abrir(a[1], a[2])
+    elif a[0] == "remover" and len(a) == 3:
+        remover(a[1], a[2])
+    elif a[0] == "_esperar" and len(a) == 4:
+        esperar(a[1], a[2], a[3])
+    else:
+        sys.exit("uso: instancias listar|criar <app> <perfil>|abrir <app> <perfil>|--temporario|remover <app> <perfil>")
+
+
+if __name__ == "__main__":
+    main()

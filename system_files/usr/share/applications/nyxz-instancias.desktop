@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Várias instâncias
+GenericName=Mesmo app com perfis separados
+Comment=Abra o mesmo app mais de uma vez, com contas e dados separados
+Exec=/usr/libexec/nyxz/configuracoes instancias
+Icon=window-duplicate
+Categories=System;Settings;
+Keywords=instancias;perfil;duas contas;multiplas;brave;discord;vesktop;navegador;

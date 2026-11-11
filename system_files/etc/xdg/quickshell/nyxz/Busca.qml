@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import Quickshell.Io
 
 // Busca estilo Raycast: apps, calculadora e ações do sistema (Super + Espaço).
 PanelWindow {
@@ -22,6 +23,13 @@ PanelWindow {
     WlrLayershell.namespace: "nyxz-busca"
 
     property int selecionado: 0
+    // Windows instalado (dual boot): mostra "Reiniciar no Windows"
+    property bool temWindows: false
+    FileView {
+        path: "/var/lib/nyxz/dualboot.json"
+        printErrors: false
+        onLoaded: { try { busca.temWindows = JSON.parse(text()).windows === true; } catch (e) {} }
+    }
     readonly property var resultados: calcular(campo.text)
 
     function normalizar(s) {
@@ -66,6 +74,9 @@ PanelWindow {
             { nome: "Desligar", chaves: "desligar shutdown poweroff", cmd: ["systemctl", "poweroff"] },
             { nome: "Sair da sessão", chaves: "sair logout encerrar", cmd: ["uwsm", "stop"] },
         ];
+        // Dual boot: só aparece com o Windows instalado (nyxz-dualboot.service grava o estado)
+        if (busca.temWindows)
+            energia.push({ nome: "Reiniciar no Windows", chaves: "windows reiniciar dual boot", cmd: ["pkexec", "/usr/libexec/nyxz/nyxz-dualboot-root", "reiniciar-windows"] });
         for (const e of energia)
             if (termo && normalizar(e.nome + " " + e.chaves).includes(termo))
                 lista.push({ grupo: "Sistema", nome: e.nome, detalhe: "", icone: "icones/energia.svg",

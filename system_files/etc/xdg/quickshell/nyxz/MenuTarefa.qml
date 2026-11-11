@@ -82,6 +82,15 @@ PanelWindow {
                     Estado.menuAberto = false;
                 }
             }
+            // Outra cópia com dados e login separados (Configurações → Várias instâncias)
+            ItemMenu {
+                texto: "Outra instância (outro perfil)…"
+                visible: /brave|chrom|vesktop|discord|code|firefox|telegram|obsidian|slack/i.test(menu.alvo ? (menu.alvo.appId || "") : "")
+                onAcionado: {
+                    Estado.executar(["/usr/libexec/nyxz/configuracoes", "instancias"]);
+                    Estado.menuAberto = false;
+                }
+            }
             ItemMenu {
                 texto: "Regra para este app…"
                 onAcionado: {

@@ -1,0 +1,191 @@
+#!/usr/bin/python3 -I
+"""Convivência com o Windows (dual boot), parte que precisa de administrador.
+
+  nyxz-dualboot-root verificar            procura o Windows e as partições NTFS e grava
+                                          /var/lib/nyxz/dualboot.json (no boot e pela página).
+                                          Na 1ª vez que acha o Windows, põe o relógio da
+                                          placa em horário local (evita o erro de 3 horas).
+  nyxz-dualboot-root reiniciar-windows    o próximo boot vai direto para o Windows
+  nyxz-dualboot-root grub ligar|desligar  entrada "Windows" no menu de boot da Nyxz
+  nyxz-dualboot-root relogio local|utc
+  nyxz-dualboot-root escrita ligar|desligar   partições do Windows graváveis (padrão: só leitura)
+
+Roda pelo pkexec, sem senha na sessão ativa (ação org.nyxz.dualboot): só aceita isto.
+"""
+import json
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+PASTA = Path("/var/lib/nyxz")
+ESTADO = PASTA / "dualboot.json"
+RELOGIO_FEITO = PASTA / "dualboot-relogio-ajustado"
+GRUB_CUSTOM = Path("/boot/grub2/custom.cfg")
+MONTAGEM = Path("/etc/udisks2/mount_options.conf")
+ESP = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+RECUPERACAO = "de94bba4-06d1-4d40-a16a-bfd50179d6ac"
+INICIO, FIM = "### BEGIN Nyxz Windows", "### END Nyxz Windows"
+
+
+def rodar(cmd, timeout=30):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout, r.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, "", str(e)
+
+
+def todas_particoes():
+    _, s, _ = rodar(["lsblk", "-J", "-b", "-o", "PATH,UUID,FSTYPE,LABEL,SIZE,PARTTYPE,MOUNTPOINTS,TYPE"])
+    out = []
+
+    def andar(lista):
+        for d in lista:
+            if d.get("type") == "part":
+                out.append(d)
+            andar(d.get("children", []) or [])
+    try:
+        andar(json.loads(s)["blockdevices"])
+    except (ValueError, KeyError):
+        pass
+    return out
+
+
+def tem_windows(esp):
+    """Procura o gerenciador de boot do Windows numa partição EFI (montando só leitura se preciso)."""
+    montada = [m for m in (esp.get("mountpoints") or []) if m]
+    if montada:
+        return (Path(montada[0]) / "EFI/Microsoft/Boot/bootmgfw.efi").exists()
+    with tempfile.TemporaryDirectory() as d:
+        if rodar(["mount", "-o", "ro", esp["path"], d])[0] != 0:
+            return False
+        try:
+            return (Path(d) / "EFI/Microsoft/Boot/bootmgfw.efi").exists()
+        finally:
+            rodar(["umount", d])
+
+
+def entrada_uefi():
+    _, s, _ = rodar(["efibootmgr"])
+    m = re.search(r"^Boot([0-9A-Fa-f]{4})\*?\s+Windows Boot Manager", s, re.M)
+    return m.group(1) if m else ""
+
+
+def hibernado(caminho):
+    # 14 = hibernado (Início rápido do Windows ligado); 15 = não foi desmontado direito
+    c, _, _ = rodar(["ntfs-3g.probe", "--readwrite", caminho])
+    return {14: "hibernado", 15: "sujo"}.get(c, "")
+
+
+def verificar():
+    PASTA.mkdir(parents=True, exist_ok=True)
+    partes = todas_particoes()
+    esp_windows = next((p for p in partes if (p.get("parttype") or "").lower() == ESP and tem_windows(p)), None)
+    ntfs = []
+    for p in partes:
+        if p.get("fstype") in ("ntfs", "ntfs3") and (p.get("parttype") or "").lower() != RECUPERACAO:
+            ntfs.append({"caminho": p["path"], "rotulo": p.get("label") or "", "tamanho": int(p.get("size") or 0),
+                         "montada": [m for m in (p.get("mountpoints") or []) if m],
+                         "estado": hibernado(p["path"])})
+    _, rtc, _ = rodar(["timedatectl", "show", "-p", "LocalRTC", "--value"])
+    dados = {
+        "windows": esp_windows is not None,
+        "esp": esp_windows["uuid"] if esp_windows else "",
+        "uefi": entrada_uefi(),
+        "grub": GRUB_CUSTOM.exists() and INICIO in GRUB_CUSTOM.read_text(errors="ignore"),
+        "relogioLocal": rtc.strip() == "yes",
+        "escrita": MONTAGEM.exists() and "# nyxz: escrita" in MONTAGEM.read_text(errors="ignore"),
+        "ntfs": ntfs,
+    }
+    # Primeira vez com Windows: relógio da placa em horário local e entrada no menu de boot
+    if dados["windows"] and not RELOGIO_FEITO.exists():
+        rodar(["timedatectl", "set-local-rtc", "1"])
+        dados["relogioLocal"] = True
+        if not dados["grub"]:
+            grub(True, dados["esp"])
+            dados["grub"] = True
+        RELOGIO_FEITO.touch()
+    if not MONTAGEM.exists():
+        escrita(False)
+    ESTADO.write_text(json.dumps(dados, ensure_ascii=False, indent=2))
+    ESTADO.chmod(0o644)
+    print(json.dumps(dados, ensure_ascii=False))
+
+
+def ler_estado():
+    try:
+        return json.loads(ESTADO.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def grub(ligar, esp=None):
+    texto = GRUB_CUSTOM.read_text(errors="ignore") if GRUB_CUSTOM.exists() else ""
+    texto = re.sub(re.escape(INICIO) + r".*?" + re.escape(FIM) + r"\n?", "", texto, flags=re.S)
+    if ligar:
+        esp = esp or ler_estado().get("esp")
+        if not esp:
+            sys.exit("O Windows não foi encontrado.")
+        texto += (f"{INICIO}\n"
+                  "menuentry \"Windows\" --class windows --class os {\n"
+                  "  insmod part_gpt\n  insmod fat\n  insmod chain\n"
+                  f"  search --no-floppy --fs-uuid --set=root {esp}\n"
+                  "  chainloader /EFI/Microsoft/Boot/bootmgfw.efi\n"
+                  f"}}\n{FIM}\n")
+        # Menu visível por alguns segundos (no bootc ele fica escondido quando só há um sistema)
+        rodar(["grub2-editenv", "-", "unset", "menu_auto_hide"])
+    GRUB_CUSTOM.parent.mkdir(parents=True, exist_ok=True)
+    if texto.strip():
+        GRUB_CUSTOM.write_text(texto)
+    elif GRUB_CUSTOM.exists():
+        GRUB_CUSTOM.unlink()
+
+
+def escrita(ligar):
+    MONTAGEM.parent.mkdir(parents=True, exist_ok=True)
+    modo = "rw" if ligar else "ro"
+    marca = "# nyxz: escrita" if ligar else "# nyxz: somente leitura"
+    MONTAGEM.write_text(
+        f"{marca}\n"
+        "# Partições do Windows (NTFS) montadas pelo Dolphin. Escolha em Configurações → Windows.\n"
+        "[defaults]\n"
+        f"ntfs3_defaults=uid=$UID,gid=$GID,windows_names,{modo}\n"
+        f"ntfs_defaults=uid=$UID,gid=$GID,windows_names,{modo}\n"
+        "ntfs3_allow=uid=$UID,gid=$GID,umask,dmask,fmask,iocharset,discard,nodiscard,sparse,nosparse,hidden,nohidden,"
+        "sys_immutable,nosys_immutable,showmeta,noshowmeta,prealloc,noprealloc,hide_dot_files,nohide_dot_files,"
+        "windows_names,nocase,case,force,ro,rw\n"
+        "ntfs_allow=uid=$UID,gid=$GID,umask,dmask,fmask,locale,norecover,ignore_case,windows_names,compression,"
+        "nocompression,big_writes,nls,nohidden,sys_immutable,nosys_immutable,showmeta,noshowmeta,ro,rw\n")
+
+
+def main():
+    a = sys.argv[1:]
+    if a == ["verificar"]:
+        verificar()
+    elif a == ["reiniciar-windows"]:
+        num = entrada_uefi()
+        if num:
+            if rodar(["efibootmgr", "--bootnext", num])[0] != 0:
+                sys.exit("Não deu para escolher o Windows no próximo boot.")
+        elif ler_estado().get("grub"):
+            rodar(["grub2-reboot", "Windows"])
+        else:
+            sys.exit("O Windows não foi encontrado neste computador.")
+        subprocess.Popen(["systemctl", "reboot"])
+    elif len(a) == 2 and a[0] == "grub" and a[1] in ("ligar", "desligar"):
+        grub(a[1] == "ligar")
+        verificar()
+    elif len(a) == 2 and a[0] == "relogio" and a[1] in ("local", "utc"):
+        rodar(["timedatectl", "set-local-rtc", "1" if a[1] == "local" else "0"])
+        verificar()
+    elif len(a) == 2 and a[0] == "escrita" and a[1] in ("ligar", "desligar"):
+        escrita(a[1] == "ligar")
+        verificar()
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

@@ -75,3 +75,7 @@ fio
 snapper
 restic
 rclone
+# Nyxz Sync (login no GitHub pelo navegador) e dual boot (partições do Windows)
+gh
+ntfs-3g
+efibootmgr

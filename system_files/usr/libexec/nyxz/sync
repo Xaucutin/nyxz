@@ -1,0 +1,303 @@
+#!/usr/bin/python3 -I
+# Nyxz Sync (ideia 13): guarda as configurações num repositório PRIVADO do próprio
+# usuário no GitHub (tema, atalhos, Ajustes, automações, apps escolhidos, VS Code,
+# terminal) e restaura numa instalação nova. Segredos nunca entram: lista de bloqueio
+# fixa + verificação de segredos em cada arquivo antes de enviar.
+#
+#   sync estado                 JSON: conectado, conta, último envio, o que entra
+#   sync entrar                 login no GitHub pelo navegador (uma linha JSON com o código)
+#   sync conectar               cria (ou usa) o repositório privado nyxz-sync
+#   sync enviar [--se-mudou]    copia as configurações e envia (o nyxz-sync.path chama)
+#   sync restaurar              baixa e aplica (guarda as atuais em ~/.config/nyxz/antes-do-sync)
+#   sync desconectar            para de sincronizar (o repositório no GitHub continua lá)
+#
+# Para testar sem GitHub: NYXZ_SYNC_REMOTO=/caminho/repo.git usa um repositório local.
+import datetime
+import fnmatch
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+from pathlib import Path
+
+CASA = Path.home()
+REPO = CASA / ".local/share/nyxz/sync"
+CONFIG = CASA / ".config/nyxz/sync.json"
+NOME_REPO = "nyxz-sync"
+REMOTO_TESTE = os.environ.get("NYXZ_SYNC_REMOTO", "")
+
+# O que entra (relativo à pasta pessoal). Pastas entram inteiras, menos o bloqueado.
+INCLUIR = [
+    ".config/nyxz",                      # Ajustes, painel, automações, congelar, streamer, espaços…
+    ".config/hypr/nyxz",                 # telas, atalhos e regras do usuário
+    ".config/Code/User/settings.json", ".config/Code/User/keybindings.json", ".config/Code/User/snippets",
+    ".var/app/com.visualstudio.code/config/Code/User/settings.json",
+    ".var/app/com.visualstudio.code/config/Code/User/keybindings.json",
+    ".config/foot", ".config/ghostty", ".config/kitty",
+    ".config/mise/config.toml",
+    ".config/spicetify/config-xpui.ini",
+    ".gitconfig",
+]
+# Nunca entra, mesmo dentro das pastas acima
+BLOQUEAR = ["*.env", ".env*", "*cofre*", "*secret*", "*token*", "*.key", "*.pem", "id_*", "*.kdbx",
+            "sync.json", "antes-do-sync", "dev", "*-estado.json", "*historico*", "stats", "*.log", "*.tmp"]
+# Padrões de segredo: se um arquivo tiver algum, ele fica de fora e você é avisado
+SEGREDOS = [
+    r"ghp_[A-Za-z0-9]{30,}", r"github_pat_[A-Za-z0-9_]{40,}", r"gho_[A-Za-z0-9]{30,}",
+    r"AKIA[0-9A-Z]{16}", r"xox[abpr]-[A-Za-z0-9-]{10,}", r"sk-[A-Za-z0-9_-]{20,}",
+    r"[MN][A-Za-z\d]{23,25}\.[\w-]{6}\.[\w-]{27,}",          # token de bot do Discord
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    r"(?i)(password|senha|passwd|api[_-]?key|secret)\s*[=:]\s*['\"]?[^\s'\"]{6,}",
+]
+# Dados que mudam sozinhos e não precisam ir (evitam envios à toa)
+MANIFESTO = "nyxz-sync.json"
+
+
+def ler(p, padrao):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return padrao
+
+
+def gravar(p, dados):
+    Path(p).parent.mkdir(parents=True, exist_ok=True)
+    Path(p).write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def rodar(cmd, cwd=None, entrada=None, timeout=120):
+    try:
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, input=entrada, timeout=timeout)
+        return r.returncode, r.stdout, r.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, "", str(e)
+
+
+def git(*args, cwd=REPO):
+    return rodar(["git", *args], cwd=cwd)
+
+
+def cfg():
+    return ler(CONFIG, {})
+
+
+def avisar(titulo, texto, erro=False):
+    subprocess.run(["notify-send", "-a", "Nyxz", "-i", "emblem-synchronizing", "-u", "critical" if erro else "normal",
+                    titulo, texto], check=False)
+
+
+def conta():
+    if REMOTO_TESTE:
+        return "teste-local"
+    c, s, _ = rodar(["gh", "api", "user", "--jq", ".login"], timeout=20)
+    return s.strip() if c == 0 else ""
+
+
+# ------------------------------------------------------------------ o que entra
+def bloqueado(rel):
+    partes = Path(rel).parts
+    return any(fnmatch.fnmatch(p, b) or fnmatch.fnmatch(rel, b) for b in BLOQUEAR for p in partes)
+
+
+def tem_segredo(caminho):
+    try:
+        if caminho.stat().st_size > 2_000_000:
+            return "grande demais"
+        texto = caminho.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return "não deu para ler"
+    for padrao in SEGREDOS:
+        if re.search(padrao, texto):
+            return "parece ter uma senha ou token"
+    return ""
+
+
+def arquivos():
+    """[(relativo, motivo_de_ficar_de_fora)]"""
+    out = []
+    for item in INCLUIR:
+        base = CASA / item
+        if not base.exists():
+            continue
+        lista = [base] if base.is_file() else [p for p in base.rglob("*") if p.is_file() and not p.is_symlink()]
+        for p in lista:
+            rel = str(p.relative_to(CASA))
+            if bloqueado(rel):
+                continue
+            out.append((rel, tem_segredo(p)))
+    return out
+
+
+def componentes():
+    """Apps escolhidos: Flatpaks do usuário e itens nativos do sistema."""
+    c, s, _ = rodar(["flatpak", "--user", "list", "--app", "--columns=application"])
+    sistema = ler("/etc/nyxz/componentes-sistema.json", {}).get("itens", [])
+    return {"flatpaks": [x for x in s.split() if x] if c == 0 else [], "sistema": sistema}
+
+
+# ------------------------------------------------------------------ comandos
+def estado():
+    c = cfg()
+    lista = arquivos()
+    print(json.dumps({
+        "gh": shutil.which("gh") is not None or bool(REMOTO_TESTE),
+        "conta": conta() if c.get("conectado") or "--conta" in sys.argv else "",
+        "conectado": bool(c.get("conectado")),
+        "repositorio": c.get("repositorio", ""),
+        "ultimo": c.get("ultimo", ""),
+        "erro": c.get("erro", ""),
+        "entram": [r for r, m in lista if not m],
+        "fora": [{"arquivo": r, "motivo": m} for r, m in lista if m],
+    }, ensure_ascii=False))
+
+
+def entrar():
+    if REMOTO_TESTE:
+        print(json.dumps({"pronto": True}), flush=True)
+        return
+    if not shutil.which("gh"):
+        sys.exit("Falta o GitHub CLI (gh) nesta versão.")
+    if rodar(["gh", "auth", "status"])[0] == 0:
+        print(json.dumps({"pronto": True}), flush=True)
+        return
+    # O gh mostra um código de uso único e abre o navegador; o token fica no chaveiro
+    p = subprocess.Popen(["gh", "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web",
+                          "--scopes", "repo"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, env={**os.environ, "GH_PROMPT_DISABLED": ""})
+    p.stdin.write("\n")
+    p.stdin.flush()
+    for linha in p.stdout:
+        m = re.search(r"code: ([A-Z0-9]{4}-[A-Z0-9]{4})", linha)
+        if m:
+            print(json.dumps({"codigo": m.group(1)}), flush=True)
+    if p.wait() != 0:
+        sys.exit("O login no GitHub não terminou.")
+    rodar(["gh", "auth", "setup-git"])
+    print(json.dumps({"pronto": True}), flush=True)
+
+
+def conectar():
+    if REMOTO_TESTE:
+        url = REMOTO_TESTE
+    else:
+        login = conta()
+        if not login:
+            sys.exit("Entre no GitHub primeiro.")
+        if rodar(["gh", "repo", "view", f"{login}/{NOME_REPO}"])[0] != 0:
+            c, _, e = rodar(["gh", "repo", "create", NOME_REPO, "--private",
+                             "--description", "Configurações da Nyxz (Nyxz Sync). Sem segredos."])
+            if c != 0:
+                sys.exit("Não deu para criar o repositório: " + e.strip()[-200:])
+        # Confere que é privado: nunca envia para um repositório público
+        c, s, _ = rodar(["gh", "repo", "view", f"{login}/{NOME_REPO}", "--json", "isPrivate", "--jq", ".isPrivate"])
+        if s.strip() != "true":
+            sys.exit(f"O repositório {login}/{NOME_REPO} existe e é público. Torne-o privado ou apague-o.")
+        url = f"https://github.com/{login}/{NOME_REPO}.git"
+    if not (REPO / ".git").exists():
+        REPO.parent.mkdir(parents=True, exist_ok=True)
+        c, _, e = rodar(["git", "clone", "-q", url, str(REPO)])
+        if c != 0:
+            REPO.mkdir(parents=True, exist_ok=True)
+            git("init", "-q", "-b", "main")
+            git("remote", "add", "origin", url)
+    git("config", "user.name", "Nyxz Sync")
+    git("config", "user.email", "sync@nyxz.local")
+    gravar(CONFIG, {**cfg(), "conectado": True, "repositorio": url.replace(".git", "")})
+    rodar(["systemctl", "--user", "enable", "--now", "nyxz-sync.path", "nyxz-sync.timer"])
+    tem_conteudo = (REPO / MANIFESTO).exists()
+    print(json.dumps({"conectado": True, "temConfiguracoes": tem_conteudo}), flush=True)
+
+
+def enviar(se_mudou=False):
+    c = cfg()
+    if not c.get("conectado") or not (REPO / ".git").exists():
+        sys.exit("O Sync não está ligado.")
+    git("pull", "-q", "--rebase", "origin", "main")
+    # Espelha os arquivos: o que saiu da pasta pessoal também sai do repositório
+    casa_repo = REPO / "casa"
+    if casa_repo.exists():
+        shutil.rmtree(casa_repo)
+    fora = []
+    for rel, motivo in arquivos():
+        if motivo:
+            fora.append(rel)
+            continue
+        destino = casa_repo / rel
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(CASA / rel, destino)
+    gravar(REPO / MANIFESTO, {"versao": 1, "computador": socket.gethostname(), "componentes": componentes()})
+    (REPO / "README.md").write_text("# Nyxz Sync\n\nConfigurações da Nyxz deste usuário. Sem senhas nem tokens: "
+                                    "eles ficam no Cofre de cada computador.\n", encoding="utf-8")
+    git("add", "-A")
+    if git("diff", "--cached", "--quiet")[0] == 0:
+        if not se_mudou:
+            print("Nada mudou desde o último envio.")
+        return
+    quando = datetime.datetime.now().isoformat(timespec="minutes")
+    git("commit", "-q", "-m", f"Sync de {socket.gethostname()} em {quando}")
+    cod, _, e = git("push", "-q", "-u", "origin", "HEAD:main")
+    if cod != 0:
+        gravar(CONFIG, {**c, "erro": e.strip()[-200:]})
+        avisar("O Nyxz Sync falhou", "Não deu para enviar as configurações: " + e.strip()[-150:], True)
+        sys.exit("Não deu para enviar: " + e.strip()[-200:])
+    gravar(CONFIG, {**c, "ultimo": quando, "erro": ""})
+    if fora:
+        avisar("Nyxz Sync", f"{len(fora)} arquivo(s) ficaram de fora porque parecem ter senha ou token.")
+    print("Enviado.")
+
+
+def restaurar():
+    if not cfg().get("conectado"):
+        sys.exit("Conecte o Sync primeiro.")
+    git("pull", "-q", "origin", "main")
+    origem = REPO / "casa"
+    if not origem.exists():
+        sys.exit("Ainda não há configurações salvas no repositório.")
+    antes = CASA / ".config/nyxz/antes-do-sync" / datetime.datetime.now().strftime("%Y-%m-%d-%H%M")
+    n = 0
+    for p in origem.rglob("*"):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(origem)
+        if bloqueado(str(rel)):
+            continue
+        alvo = CASA / rel
+        if alvo.exists():
+            (antes / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(alvo, antes / rel)
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, alvo)
+        n += 1
+    manifesto = ler(REPO / MANIFESTO, {})
+    print(json.dumps({"restaurados": n, "componentes": manifesto.get("componentes", {}),
+                      "copiaAntes": str(antes) if antes.exists() else ""}, ensure_ascii=False))
+
+
+def desconectar():
+    rodar(["systemctl", "--user", "disable", "--now", "nyxz-sync.path", "nyxz-sync.timer"])
+    gravar(CONFIG, {**cfg(), "conectado": False})
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] == "estado":
+        estado()
+    elif a == ["entrar"]:
+        entrar()
+    elif a == ["conectar"]:
+        conectar()
+    elif a[0] == "enviar":
+        enviar("--se-mudou" in a)
+    elif a == ["restaurar"]:
+        restaurar()
+    elif a == ["desconectar"]:
+        desconectar()
+    else:
+        sys.exit("uso: sync estado|entrar|conectar|enviar [--se-mudou]|restaurar|desconectar")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Windows (dual boot)
+GenericName=Convivência com o Windows
+Comment=Reiniciar no Windows, menu de boot, relógio e partições do Windows
+Exec=/usr/libexec/nyxz/configuracoes windows
+Icon=computer
+Categories=System;Settings;
+Keywords=windows;dual boot;boot;grub;ntfs;relogio;inicio rapido;

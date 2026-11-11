@@ -188,7 +188,7 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Som por app e perfis | `nyxz-audio` (WirePlumber + filter-chain) | 🟡 |
 | Animações estilo Lenis | Curvas exponenciais no Hyprland e no QML; rolagem com inércia em `Flickable` customizado | 🟢 |
 | Finalizar tarefa | `systemctl --user kill --signal=SIGKILL` no escopo do app | 🟢 |
-| Várias instâncias | Pasta de perfil própria + `dbus-run-session`/`bubblewrap`; lista de compatibilidade | 🟡 |
+| Várias instâncias | `/usr/libexec/nyxz/instancias`: pasta de perfil própria por tipo (`--user-data-dir`, `--profile`, `-workdir`, XDG) + lista de compatibilidade | ✅ |
 | Espaços, regras de janela, cola de atalhos | Arquivos gerados em `~/.config/hypr/nyxz/` | 🟢 |
 | Brilho e luz azul | `ddcutil` (i2c-dev) + `hyprsunset` | 🟢 (depende do monitor) |
 | Wallpaper imagem/vídeo/Wallpaper Engine | Gerenciador próprio + `mpvpaper` + `linux-wallpaperengine` | 🟡 / 🔴 WE |
@@ -241,12 +241,12 @@ Legenda de risco: 🟢 baixo · 🟡 médio · 🔴 alto.
 | Discos | `smartctl`/`nvme-cli` por timer + `fio` sob demanda | 🟢 |
 | Snapshots | Snapper na pasta pessoal (Btrfs) + "Versões anteriores" no Dolphin | 🟡 |
 | Backup | restic + rclone, timer | 🟢 |
-| Nyxz Sync | Repositório Git privado + lista de bloqueio + verificação de segredos | 🟢 |
+| Nyxz Sync | `/usr/libexec/nyxz/sync` + `gh` (login pelo navegador) + repositório privado + lista de bloqueio + verificação de segredos | ✅ |
 | Automações | Motor no shell (`Automacoes.qml`: Hyprland, Modo jogo, udev, conferência a cada 20 s) + ações em `/usr/libexec/nyxz/automacoes` | ✅ |
 | Congelar apps | `/usr/libexec/nyxz/congelar` (`cgroup.freeze` + `memory.reclaim`) + `Congelar.qml` (foco pelo Hyprland), exceções da seção 3.4 | ✅ |
 | Modo streamer | `Streamer.qml` (captura `xdph`, OBS, Share) + capas `VeuStreamer.qml` + marca para as Configurações | ✅ |
 | Nyxz Doctor | `/usr/libexec/nyxz/doctor` (Python, só com a página aberta) + `nyxz-doctor-root` (pkexec) + página nas Configurações | ✅ |
-| Dual boot | Entrada do Windows no GRUB, NTFS, relógio local, aviso do Início rápido | 🟡 |
+| Dual boot | `nyxz-dualboot-root` (custom.cfg, efibootmgr, udisks ro, LocalRTC, ntfs-3g.probe) + página | ✅ |
 
 ---
 

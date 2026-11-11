@@ -24,12 +24,15 @@ ShellRoot {
         { id: "automacoes", nome: "Automações" },
         { id: "congelar", nome: "Congelar apps" },
         { id: "streamer", nome: "Modo streamer" },
+        { id: "instancias", nome: "Várias instâncias" },
         { id: "componentes", nome: "Apps e componentes" },
         { id: "estatisticas", nome: "Estatísticas" },
         { id: "discos", nome: "Discos" },
         { id: "voltar", nome: "Voltar no tempo" },
         { id: "backup", nome: "Backup" },
+        { id: "sync", nome: "Nyxz Sync" },
         { id: "datahora", nome: "Data e hora" },
+        { id: "windows", nome: "Windows (dual boot)" },
         { id: "atualizacoes", nome: "Atualizações" },
         { id: "doctor", nome: "Nyxz Doctor" },
         { id: "sobre", nome: "Sobre" }
@@ -160,7 +163,7 @@ ShellRoot {
                         opacity: ativa ? 1 : 0
                         source: {
                             const mapa = { rede: "PaginaRede.qml", vpn: "PaginaVpn.qml", lan: "PaginaLan.qml", som: "PaginaSom.qml", telas: "PaginaTelas.qml",
-                                           teclado: "PaginaTeclado.qml", controles: "PaginaControles.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", automacoes: "PaginaAutomacoes.qml", congelar: "PaginaCongelar.qml", streamer: "PaginaStreamer.qml", componentes: "PaginaComponentes.qml", estatisticas: "PaginaEstatisticas.qml", discos: "PaginaDiscos.qml", voltar: "PaginaVoltar.qml", backup: "PaginaBackup.qml", datahora: "PaginaDataHora.qml",
+                                           teclado: "PaginaTeclado.qml", controles: "PaginaControles.qml", aparencia: "PaginaAparencia.qml", ajustes: "PaginaAjustes.qml", regras: "PaginaRegras.qml", espacos: "PaginaEspacos.qml", automacoes: "PaginaAutomacoes.qml", congelar: "PaginaCongelar.qml", streamer: "PaginaStreamer.qml", instancias: "PaginaInstancias.qml", sync: "PaginaSync.qml", windows: "PaginaWindows.qml", componentes: "PaginaComponentes.qml", estatisticas: "PaginaEstatisticas.qml", discos: "PaginaDiscos.qml", voltar: "PaginaVoltar.qml", backup: "PaginaBackup.qml", datahora: "PaginaDataHora.qml",
                                            atualizacoes: "PaginaAtualizacoes.qml", doctor: "PaginaDoctor.qml", sobre: "PaginaSobre.qml" };
                             return mapa[modelData.id];
                         }

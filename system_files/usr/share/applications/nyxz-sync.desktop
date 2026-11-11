@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Nyxz Sync
+GenericName=Configurações num repositório privado seu no GitHub
+Comment=Guarda as configurações no seu GitHub privado e restaura numa instalação nova
+Exec=/usr/libexec/nyxz/configuracoes sync
+Icon=emblem-synchronizing
+Categories=System;Settings;
+Keywords=sync;sincronizar;github;configuracoes;restaurar;backup;dotfiles;

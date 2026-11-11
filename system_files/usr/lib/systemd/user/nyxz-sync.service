@@ -1,0 +1,10 @@
+[Unit]
+Description=Nyxz Sync: envia as configurações para o seu repositório privado
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Espera um pouco: várias mudanças seguidas viram um envio só
+ExecStartPre=/usr/bin/sleep 45
+ExecStart=/usr/libexec/nyxz/sync enviar --se-mudou
+Nice=10
