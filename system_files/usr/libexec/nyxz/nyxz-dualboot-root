@@ -107,6 +107,9 @@ def verificar():
             grub(True, dados["esp"])
             dados["grub"] = True
         RELOGIO_FEITO.touch()
+    # Entrada criada por uma versão antiga (sem os 5 s de menu): refaz
+    if dados["windows"] and dados["grub"] and "timeout_style" not in GRUB_CUSTOM.read_text(errors="ignore"):
+        grub(True, dados["esp"])
     if not MONTAGEM.exists():
         escrita(False)
     ESTADO.write_text(json.dumps(dados, ensure_ascii=False, indent=2))
@@ -129,6 +132,9 @@ def grub(ligar, esp=None):
         if not esp:
             sys.exit("O Windows não foi encontrado.")
         texto += (f"{INICIO}\n"
+                  # O bootc deixa o menu por 1 s; com dois sistemas, 5 s para dar tempo de escolher
+                  "set timeout_style=menu\n"
+                  "if [ \"${timeout}\" -lt 5 ]; then set timeout=5; fi\n"
                   "menuentry \"Windows\" --class windows --class os {\n"
                   "  insmod part_gpt\n  insmod fat\n  insmod chain\n"
                   f"  search --no-floppy --fs-uuid --set=root {esp}\n"

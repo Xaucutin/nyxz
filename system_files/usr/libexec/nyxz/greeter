@@ -1,6 +1,9 @@
 #!/usr/bin/bash
 # Tela de login da Nyxz: Quickshell dentro do cage (compositor de uma janela só).
 # Se faltar alguma peça, cai na tela de login em texto (tuigreet ou agreety).
+# Se o vídeo não subir (placa sem driver, VM sem 3D), tenta de novo com desenho por
+# software puro (pixman) e, se ainda assim falhar, usa o login em texto: nunca fica
+# uma tela preta sem login.
 if command -v cage >/dev/null 2>&1 && command -v qs >/dev/null 2>&1 \
    && [ -f /etc/xdg/quickshell/nyxz-login/shell.qml ]; then
   export XKB_DEFAULT_LAYOUT=br
@@ -12,7 +15,12 @@ if command -v cage >/dev/null 2>&1 && command -v qs >/dev/null 2>&1 \
     export WLR_RENDERER_ALLOW_SOFTWARE=1
     export WLR_NO_HARDWARE_CURSORS=1
   fi
-  exec cage -s -- qs -c nyxz-login
+  # O cage termina com 0 depois de um login; outro código = não conseguiu desenhar
+  cage -s -- qs -c nyxz-login && exit 0
+  echo "nyxz-greeter: o vídeo não subiu; tentando desenho por software" >&2
+  QT_QUICK_BACKEND=software WLR_RENDERER=pixman WLR_RENDERER_ALLOW_SOFTWARE=1 \
+    cage -s -- qs -c nyxz-login && exit 0
+  echo "nyxz-greeter: usando o login em texto" >&2
 fi
 
 if command -v tuigreet >/dev/null 2>&1; then
