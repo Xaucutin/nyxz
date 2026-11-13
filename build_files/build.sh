@@ -75,6 +75,8 @@ if ! command -v uwsm >/dev/null 2>&1; then
   dnf -y install --setopt=install_weak_deps=False python3-dbus python3-pyxdg newt
   build_deps="meson ninja-build scdoc git-core"
   # shellcheck disable=SC2086
+  build_deps_novos=$(for p in $build_deps; do rpm -q "$p" >/dev/null 2>&1 || echo "$p"; done)
+  # Só remove depois o que entrou agora: tirar o git-core levava junto o Plasma
   dnf -y install --setopt=install_weak_deps=False $build_deps
   tmp="$(mktemp -d)"
   if git clone --depth 1 --branch "${UWSM_VERSION}" https://github.com/Vladimir-csp/uwsm.git "$tmp/uwsm" \
@@ -86,7 +88,7 @@ if ! command -v uwsm >/dev/null 2>&1; then
   fi
   rm -rf "$tmp"
   # shellcheck disable=SC2086
-  dnf -y remove $build_deps || true
+  dnf -y remove $build_deps_novos || true
 fi
 
 # ---------------------------------------------------------------- vídeo como papel de parede
@@ -98,6 +100,8 @@ if ! command -v mpvpaper >/dev/null 2>&1; then
   dnf -y install --setopt=install_weak_deps=False mpv-libs
   build_deps="meson ninja-build gcc git-core pkgconf-pkg-config mpv-devel wayland-devel wayland-protocols-devel mesa-libEGL-devel"
   # shellcheck disable=SC2086
+  build_deps_novos=$(for p in $build_deps; do rpm -q "$p" >/dev/null 2>&1 || echo "$p"; done)
+  # Só remove depois o que entrou agora: tirar o git-core levava junto o Plasma
   dnf -y install --setopt=install_weak_deps=False $build_deps
   tmp="$(mktemp -d)"
   if git clone --depth 1 --branch "${MPVPAPER_VERSION}" https://github.com/GhostNaN/mpvpaper.git "$tmp/mpvpaper" \
@@ -111,7 +115,7 @@ if ! command -v mpvpaper >/dev/null 2>&1; then
   fi
   rm -rf "$tmp"
   # shellcheck disable=SC2086
-  dnf -y remove $build_deps || true
+  dnf -y remove $build_deps_novos || true
 fi
 
 # ---------------------------------------------------------------- fontes
