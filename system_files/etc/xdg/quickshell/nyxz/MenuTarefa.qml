@@ -99,6 +99,14 @@ PanelWindow {
                 }
             }
             ItemMenu {
+                texto: "Minimizar"
+                onAcionado: { Estado.minimizar(menu.alvo); Estado.menuAberto = false; }
+            }
+            ItemMenu {
+                texto: "Maximizar / restaurar"
+                onAcionado: { Estado.maximizar(menu.alvo); Estado.menuAberto = false; }
+            }
+            ItemMenu {
                 texto: "Fechar"
                 onAcionado: {
                     menu.alvo.close();

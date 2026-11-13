@@ -62,4 +62,36 @@ Singleton {
         for (const r of sufixos) s = s.replace(r, "");
         return s;
     }
+
+    // Janela minimizada (special:minimizado) volta para a área atual; as outras só ganham foco
+    function hyprDe(t) {
+        Hyprland.refreshToplevels();
+        return Hyprland.toplevels.values.find(x => x.wayland === t) || null;
+    }
+    function hx(h) { return "0x" + String(h.address).replace(/^0x/, ""); }
+    function restaurarOuAtivar(t) {
+        const h = hyprDe(t);
+        const ws = h && h.workspace ? h.workspace.name : "";
+        if (ws === "special:minimizado" && Hyprland.focusedWorkspace) {
+            Hyprland.dispatch("hl.dsp.window.move({ workspace = " + Hyprland.focusedWorkspace.id + ", window = 'address:" + hx(h) + "', follow = true })");
+            Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + hx(h) + "' })");
+        } else t.activate();
+    }
+    function minimizar(t) {
+        const h = hyprDe(t);
+        if (h) Hyprland.dispatch("hl.dsp.window.move({ workspace = 'special:minimizado', window = 'address:" + hx(h) + "', follow = false })");
+    }
+    function maximizar(t) {
+        const h = hyprDe(t);
+        if (h) Hyprland.dispatch("hl.dsp.window.fullscreen({ mode = 'maximized', action = 'toggle', window = 'address:" + hx(h) + "' })");
+    }
+    // Botão "minimizar" desenhado pelo próprio app (GTK, Electron…): o Hyprland só avisa
+    Connections {
+        target: Hyprland
+        function onRawEvent(ev) {
+            if (ev.name !== "minimized") return;
+            const p = ev.data.split(",");
+            if (p[1] === "1") Hyprland.dispatch("hl.dsp.window.move({ workspace = 'special:minimizado', window = 'address:0x" + p[0] + "', follow = false })");
+        }
+    }
 }

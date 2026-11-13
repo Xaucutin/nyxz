@@ -136,6 +136,9 @@ tentar(function() hl.bind(mod .. " + SHIFT + C", hl.dsp.exec_cmd(cap .. "cor")) 
 tentar(function() hl.bind(mod .. " + SHIFT + M", hl.dsp.exec_cmd(cap .. "regua")) end)
 tentar(function() hl.bind(mod .. " + SHIFT + R", hl.dsp.exec_cmd(cap .. "gravar area")) end)
 hl.bind(mod .. " + Q",      hl.dsp.window.close())
+-- Estilo Windows: Super+↑ maximiza (mantém a barra), Super+↓ minimiza para a barra de tarefas
+tentar(function() hl.bind(mod .. " + SHIFT + up",   hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" })) end)
+tentar(function() hl.bind(mod .. " + SHIFT + down", hl.dsp.window.move({ workspace = "special:minimizado", follow = false })) end)
 hl.bind(mod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mod .. " + SHIFT + E",
     hl.dsp.exec_cmd("uwsm stop || hyprctl dispatch 'hl.dsp.exit()'"))
@@ -167,6 +170,11 @@ hl.bind("XF86AudioMicMute",     hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_S
 ----------------------
 ---- JANELAS ----
 ----------------------
+-- Modo Windows: todo app abre em janela (flutuante e centralizado), nunca encaixado.
+tentar(function()
+    hl.window_rule({ name = "nyxz-modo-janela", match = { class = ".*" }, float = true, center = true })
+end)
+
 -- O Nyxz Setup abre em tela cheia.
 tentar(function()
     hl.window_rule({

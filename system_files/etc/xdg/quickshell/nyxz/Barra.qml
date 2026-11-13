@@ -190,7 +190,7 @@ PanelWindow {
                                 } else if (mouse.button === Qt.MiddleButton) {
                                     tarefa.modelData.close();
                                 } else {
-                                    tarefa.modelData.activate();
+                                    Estado.restaurarOuAtivar(tarefa.modelData);
                                 }
                             }
                         }
