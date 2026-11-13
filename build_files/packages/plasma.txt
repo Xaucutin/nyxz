@@ -2,7 +2,8 @@
 # (barra de título, minimizar/maximizar, encaixe nas bordas, Alt+Tab com prévia).
 plasma-workspace
 plasma-desktop
-kwin-wayland
+kwin
+plasma-workspace-wayland
 plasma-systemsettings
 plasma-nm
 plasma-pa
