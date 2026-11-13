@@ -3,7 +3,8 @@
 plasma-workspace
 plasma-desktop
 kwin
-plasma-workspace-wayland
+# Pacote que traz a sessão Wayland (o nome muda entre versões do Fedora)
+/usr/share/wayland-sessions/plasma.desktop
 plasma-systemsettings
 plasma-nm
 plasma-pa
