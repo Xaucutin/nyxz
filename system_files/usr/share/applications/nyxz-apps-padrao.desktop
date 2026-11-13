@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Apps padrão
+Comment=Escolher o navegador padrão e qual app abre cada tipo de arquivo
+Exec=/usr/libexec/nyxz/configuracoes appspadrao
+Icon=preferences-desktop-default-applications
+Categories=System;Settings;
+Keywords=padrao;navegador;abrir com;extensao;tipo de arquivo;

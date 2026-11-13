@@ -197,10 +197,26 @@ systemctl enable bluetooth.service 2>/dev/null || true
 # é risco à toa. Liga pelo Dev Hub → SSH quando precisar.
 systemctl disable sshd.service sshd.socket 2>/dev/null || true
 # Serviços de usuário da Nyxz: ligados para todos os usuários, sobem com a sessão gráfica.
-systemctl --global enable nyxz-scoped.service nyxz-discos-alerta.path nyxz-stats.service nyxz-chaveiro.service
+systemctl --global enable nyxz-scoped.service nyxz-discos-alerta.path nyxz-stats.service nyxz-chaveiro.service nyxz-ajustes-apps.service nyxz-clipboard.service
 # Repositórios de terceiros ficam desligados no sistema instalado: as atualizações
 # vêm pela imagem nova, não por dnf.
 sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/_copr_*.repo 2>/dev/null || true
+
+# ---------------------------------------------------------------- visual (teste no PC real)
+log "Tema escuro dos apps Qt, ícones e tela de boot"
+# Cores do Breeze escuro no kdeglobals do sistema (o Dolphin lê daqui)
+[ -f /usr/share/color-schemes/BreezeDark.colors ] && sed '/^\[General\]/,/^$/d' /usr/share/color-schemes/BreezeDark.colors >> /etc/xdg/kdeglobals
+# Tela de boot: logo NX + animação do tema "spinner" (frames throbber/animation)
+T=/usr/share/plymouth/themes/nyxz
+if command -v plymouth-set-default-theme >/dev/null && [ -d /usr/share/plymouth/themes/spinner ]; then
+  cp /usr/share/plymouth/themes/spinner/{throbber,animation}-*.png "$T"/ 2>/dev/null || true
+  rsvg-convert -w 160 "$T/nyxz-mark.svg" -o "$T/watermark.png" || echo "AVISO: logo do boot não gerado"
+  plymouth-set-default-theme nyxz
+  KVER="$(ls /usr/lib/modules | sort -V | tail -1)"
+  dracut --no-hostonly --kver "$KVER" --reproducible --add plymouth -f "/usr/lib/modules/$KVER/initramfs.img"     || echo "AVISO: initramfs com a tela de boot falhou"
+else
+  echo "AVISO: Plymouth indisponível; boot continua com texto"
+fi
 
 # ---------------------------------------------------------------- conferência
 # Falha o build se algum pacote obrigatório sumiu no caminho (ex.: removido por

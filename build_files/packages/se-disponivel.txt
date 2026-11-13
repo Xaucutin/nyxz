@@ -89,3 +89,21 @@ tesseract-langpack-por
 tesseract-langpack-eng
 wf-recorder
 ffmpeg
+# Teste no PC real (11/11): ícones, tema escuro dos apps Qt (Dolphin), fontes,
+# histórico da área de transferência e tela de boot
+papirus-icon-theme
+plasma-breeze
+plasma-integration
+cliphist
+google-noto-sans-symbols-fonts
+google-noto-sans-symbols-2-fonts
+google-noto-sans-math-fonts
+google-noto-sans-cjk-vf-fonts
+google-noto-serif-fonts
+liberation-sans-fonts
+liberation-serif-fonts
+liberation-mono-fonts
+dejavu-sans-fonts
+plymouth
+plymouth-plugin-two-step
+librsvg2-tools

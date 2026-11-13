@@ -1,0 +1,12 @@
+[Unit]
+Description=Nyxz: histórico da área de transferência
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionPathExists=/usr/bin/cliphist
+
+[Service]
+ExecStart=/usr/bin/wl-paste --watch /usr/bin/cliphist -max-items 200 store
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

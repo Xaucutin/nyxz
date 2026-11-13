@@ -1,0 +1,10 @@
+[Unit]
+Description=Nyxz: ajustes dos apps no login
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/nyxz/ajustes-apps
+
+[Install]
+WantedBy=graphical-session.target

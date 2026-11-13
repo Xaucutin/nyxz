@@ -75,8 +75,9 @@ PanelWindow {
                 }
             }
 
-            // ---------------------------------------------- workspaces 1 a 5
+            // ---------------------------------------------- workspaces 1 a 5 (opcional)
             Row {
+                visible: Ajustes.areasTrabalho
                 Layout.leftMargin: 8
                 Layout.rightMargin: 12
                 spacing: 0

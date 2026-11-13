@@ -51,3 +51,4 @@ unzip
 libatomic
 # Português do Brasil no sistema (sem isto o instalador cai em C.UTF-8 e tudo fica em inglês)
 glibc-langpack-pt
+sudo

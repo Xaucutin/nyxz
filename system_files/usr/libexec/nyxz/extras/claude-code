@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+# Claude Code (CLI da Anthropic) na conta do usuário, pelo instalador oficial.
+#   claude-code instalar | remover | estado
+set -uo pipefail
+BIN="$HOME/.local/bin/claude"
+case "${1:-}" in
+  instalar) curl -fsSL https://claude.ai/install.sh | bash ;;
+  remover)  rm -f "$BIN"; rm -rf "$HOME/.local/share/claude" ;;
+  estado)   [ -x "$BIN" ] ;;
+  *) echo "uso: claude-code instalar|remover|estado" >&2; exit 2 ;;
+esac

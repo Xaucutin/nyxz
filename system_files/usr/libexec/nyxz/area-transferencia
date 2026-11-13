@@ -1,0 +1,6 @@
+#!/usr/bin/bash
+# Histórico da área de transferência (Super+V, como o Win+V): escolha um item e ele
+# volta a ser o "copiado". O histórico é guardado pelo serviço nyxz-clipboard (cliphist).
+command -v cliphist >/dev/null || { notify-send -a Nyxz "Histórico indisponível" "Falta o cliphist nesta versão."; exit 1; }
+escolha="$(cliphist list | fuzzel --dmenu --prompt 'Colar: ' --width 60 --lines 12)" || exit 0
+printf '%s' "$escolha" | cliphist decode | wl-copy

@@ -139,7 +139,15 @@ hl.bind(mod .. " + Q",      hl.dsp.window.close())
 -- Estilo Windows: Super+↑ maximiza (mantém a barra), Super+↓ minimiza para a barra de tarefas
 tentar(function() hl.bind(mod .. " + SHIFT + up",   hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" })) end)
 tentar(function() hl.bind(mod .. " + SHIFT + down", hl.dsp.window.move({ workspace = "special:minimizado", follow = false })) end)
-hl.bind(mod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mod .. " + SHIFT + V", hl.dsp.window.float({ action = "toggle" }))
+-- Estilo Windows: Super sozinho abre a busca; Super+V histórico do copiar; Super+D área de
+-- trabalho; Alt+Tab volta para a janela anterior
+tentar(function() hl.bind(mod .. " + SUPER_L", hl.dsp.exec_cmd(lancador), { release = true }) end)
+tentar(function() hl.bind(mod .. " + V", hl.dsp.exec_cmd("/usr/libexec/nyxz/area-transferencia")) end)
+tentar(function() hl.bind(mod .. " + D", hl.dsp.exec_cmd("/usr/libexec/nyxz/janela area-de-trabalho")) end)
+tentar(function() hl.bind("ALT + TAB", hl.dsp.exec_cmd("/usr/libexec/nyxz/janela alternar")) end)
+-- Janela solta encaixa nas bordas da tela e nas outras janelas ao arrastar
+tentar(function() hl.config({ general = { snap = { enabled = true, window_gap = 10, monitor_gap = 10 } } }) end)
 hl.bind(mod .. " + SHIFT + E",
     hl.dsp.exec_cmd("uwsm stop || hyprctl dispatch 'hl.dsp.exit()'"))
 tentar(function() hl.bind(mod .. " + F", hl.dsp.window.fullscreen()) end)

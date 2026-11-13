@@ -1,0 +1,26 @@
+#!/usr/bin/bash
+# Ajustes dos apps feitos no login (serviço nyxz-ajustes-apps). Só cria o que não existe:
+# nada que o usuário já mudou é sobrescrito.
+# Sober (Roblox): permissões que ele pede ao abrir (Discord Rich Presence e controles)
+if flatpak --user info org.vinegarhq.Sober >/dev/null 2>&1 || flatpak info org.vinegarhq.Sober >/dev/null 2>&1; then
+  flatpak override --user --filesystem=xdg-run/app/com.discordapp.Discord:create \
+    --filesystem=xdg-run/discord-ipc-0 --device=input org.vinegarhq.Sober
+fi
+# Ghostty: Ctrl+C copia quando há texto selecionado (senão interrompe, como sempre); Ctrl+V cola
+g="$HOME/.config/ghostty/config"
+if [ ! -e "$g" ]; then
+  mkdir -p "$(dirname "$g")"
+  printf '%s\n' "keybind = performable:ctrl+c=copy_to_clipboard" "keybind = ctrl+v=paste_from_clipboard" > "$g"
+fi
+# Editor do print: Ctrl+C copia e fecha
+s="$HOME/.config/swappy/config"
+if [ ! -e "$s" ]; then
+  mkdir -p "$(dirname "$s")"
+  printf '%s\n' "[Default]" "early_exit=true" "save_dir=$HOME/Imagens/Capturas" > "$s"
+fi
+# VS Code: barra própria com Minimizar | Maximizar | Fechar
+for v in "$HOME/.config/Code/User" "$HOME/.var/app/com.visualstudio.code/config/Code/User"; do
+  [ -d "$(dirname "$v")" ] || continue
+  mkdir -p "$v"; [ -e "$v/settings.json" ] || printf '{\n  "window.titleBarStyle": "custom"\n}\n' > "$v/settings.json"
+done
+exit 0

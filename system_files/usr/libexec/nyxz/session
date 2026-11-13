@@ -16,6 +16,9 @@ case "$(systemd-detect-virt 2>/dev/null)" in
   oracle|vmware) export LIBGL_ALWAYS_SOFTWARE=1 ;;
 esac
 
+# Apps Qt (Dolphin…) com o tema escuro e os ícones do kdeglobals
+[ -e /usr/lib64/qt6/plugins/platformthemes/KDEPlasmaPlatformTheme6.so ] && export QT_QPA_PLATFORMTHEME=kde
+
 hyprland_cmd="Hyprland"
 command -v start-hyprland >/dev/null 2>&1 && hyprland_cmd="start-hyprland"
 

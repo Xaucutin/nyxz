@@ -1,0 +1,42 @@
+#!/usr/bin/python3 -I
+# Atalhos de janela no estilo Windows (Hyprland).
+#   janela area-de-trabalho   Super+D: esconde todas as janelas da área atual; de novo, traz de volta
+#   janela alternar           Alt+Tab: vai para a janela usada antes desta
+import json
+import subprocess
+import sys
+
+ESCONDIDAS = "special:area-de-trabalho"
+
+
+def hypr(*a):
+    return subprocess.run(["hyprctl", *a], capture_output=True, text=True).stdout
+
+
+def dispatch(expr):
+    subprocess.run(["hyprctl", "dispatch", expr], capture_output=True)
+
+
+def main():
+    clientes = json.loads(hypr("-j", "clients") or "[]")
+    ws = json.loads(hypr("-j", "activeworkspace") or "{}").get("id", 1)
+    if sys.argv[1:] == ["area-de-trabalho"]:
+        escondidas = [c for c in clientes if c["workspace"]["name"] == ESCONDIDAS]
+        if escondidas:
+            for c in escondidas:
+                dispatch(f"hl.dsp.window.move({{ workspace = {ws}, window = 'address:{c['address']}', follow = false }})")
+        else:
+            for c in clientes:
+                if c["workspace"]["id"] == ws:
+                    dispatch(f"hl.dsp.window.move({{ workspace = '{ESCONDIDAS}', window = 'address:{c['address']}', follow = false }})")
+    elif sys.argv[1:] == ["alternar"]:
+        visiveis = [c for c in clientes if not c["workspace"]["name"].startswith("special")]
+        anterior = min((c for c in visiveis if c.get("focusHistoryID", 0) > 0), key=lambda c: c["focusHistoryID"], default=None)
+        if anterior:
+            dispatch(f"hl.dsp.focus({{ window = 'address:{anterior['address']}' }})")
+    else:
+        sys.exit("uso: janela area-de-trabalho|alternar")
+
+
+if __name__ == "__main__":
+    main()

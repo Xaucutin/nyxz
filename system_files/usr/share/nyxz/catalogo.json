@@ -131,6 +131,17 @@
       "tamanho_mb": 60
     },
     {
+      "id": "claude-code",
+      "categoria": "dev",
+      "nome": "Claude Code",
+      "descricao": "Assistente de programação da Anthropic no terminal (comando claude). Instalado pelo instalador oficial, na sua conta.",
+      "tipo": "usuario",
+      "script": "/usr/libexec/nyxz/extras/claude-code",
+      "args": [],
+      "padrao": false,
+      "tamanho_mb": 200
+    },
+    {
       "id": "node",
       "categoria": "dev",
       "nome": "Node.js (LTS)",

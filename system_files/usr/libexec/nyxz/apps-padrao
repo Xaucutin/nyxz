@@ -1,0 +1,80 @@
+#!/usr/bin/python3 -I
+# Apps padrão e tipos de arquivo (como no Windows), por cima do xdg-mime.
+#   apps-padrao listar                       JSON: categorias, app atual e apps que abrem aquilo
+#   apps-padrao definir <categoria> <app.desktop>
+#   apps-padrao extensao <ext> [app.desktop] sem app: JSON com o atual e os candidatos
+import configparser
+import json
+import mimetypes
+import subprocess
+import sys
+from pathlib import Path
+
+CATEGORIAS = {
+    "navegador": ("Navegador", ["x-scheme-handler/http", "x-scheme-handler/https", "text/html", "application/xhtml+xml"]),
+    "email": ("E-mail", ["x-scheme-handler/mailto"]),
+    "musica": ("Música", ["audio/mpeg", "audio/flac", "audio/ogg", "audio/x-wav", "audio/mp4", "audio/aac"]),
+    "video": ("Vídeo", ["video/mp4", "video/x-matroska", "video/webm", "video/quicktime", "video/x-msvideo"]),
+    "imagem": ("Imagens", ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/svg+xml"]),
+    "pdf": ("PDF", ["application/pdf"]),
+    "texto": ("Texto e código", ["text/plain", "text/markdown", "application/json", "text/x-python", "application/x-shellscript"]),
+    "compactado": ("Arquivos compactados", ["application/zip", "application/x-7z-compressed", "application/x-tar", "application/vnd.rar"]),
+    "pasta": ("Pastas", ["inode/directory"]),
+}
+DIRS = [Path.home() / ".local/share/applications", Path.home() / ".local/share/flatpak/exports/share/applications",
+        Path("/var/lib/flatpak/exports/share/applications"), Path("/usr/share/applications")]
+
+
+def apps():
+    vistos = {}
+    for d in DIRS:
+        for f in sorted(d.glob("*.desktop")) if d.is_dir() else []:
+            if f.name in vistos:
+                continue
+            c = configparser.ConfigParser(interpolation=None, strict=False)
+            try:
+                c.read(f, encoding="utf-8")
+                e = c["Desktop Entry"]
+            except Exception:
+                continue
+            if e.get("NoDisplay", "").lower() == "true" or e.get("Hidden", "").lower() == "true":
+                continue
+            vistos[f.name] = {"id": f.name, "nome": e.get("Name[pt_BR]") or e.get("Name", f.stem),
+                              "icone": e.get("Icon", ""), "mimes": [m for m in e.get("MimeType", "").split(";") if m]}
+    return list(vistos.values())
+
+
+def atual(mime):
+    return subprocess.run(["xdg-mime", "query", "default", mime], capture_output=True, text=True).stdout.strip()
+
+
+def candidatos(mimes, todos):
+    return [{"id": a["id"], "nome": a["nome"], "icone": a["icone"]} for a in todos if set(mimes) & set(a["mimes"])]
+
+
+def main():
+    a = sys.argv[1:]
+    todos = apps()
+    if not a or a[0] == "listar":
+        print(json.dumps([{"id": k, "nome": n, "atual": atual(m[0]), "apps": candidatos(m, todos)}
+                          for k, (n, m) in CATEGORIAS.items()], ensure_ascii=False))
+    elif a[0] == "definir" and len(a) == 3 and a[1] in CATEGORIAS:
+        subprocess.run(["xdg-mime", "default", a[2], *CATEGORIAS[a[1]][1]], check=True)
+        if a[1] == "navegador":
+            subprocess.run(["xdg-settings", "set", "default-web-browser", a[2]], capture_output=True)
+    elif a[0] == "extensao" and len(a) in (2, 3):
+        mime = mimetypes.guess_type("x." + a[1].lstrip("."))[0]
+        if not mime:
+            sys.exit("Extensão desconhecida.")
+        if len(a) == 3:
+            subprocess.run(["xdg-mime", "default", a[2], mime], check=True)
+        else:
+            outros = [{"id": x["id"], "nome": x["nome"], "icone": x["icone"]} for x in todos]
+            print(json.dumps({"mime": mime, "atual": atual(mime), "apps": candidatos([mime], todos) or outros},
+                             ensure_ascii=False))
+    else:
+        sys.exit("uso: apps-padrao listar|definir <categoria> <app>|extensao <ext> [app]")
+
+
+if __name__ == "__main__":
+    main()

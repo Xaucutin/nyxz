@@ -1,0 +1,33 @@
+[Plymouth Theme]
+Name=Nyxz
+Description=Logo NX da Nyxz com animação de carregamento
+ModuleName=two-step
+
+[two-step]
+Font=Geist 12
+TitleFont=Geist 18
+ImageDir=/usr/share/plymouth/themes/nyxz
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.75
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.382
+HorizontalAlignment=.5
+VerticalAlignment=.7
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.45
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x09090d
+BackgroundEndColor=0x09090d
+ProgressBarBackgroundColor=0x09090d
+ProgressBarForegroundColor=0x09090d
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+
+[shutdown]
+UseEndAnimation=false
+
+[reboot]
+UseEndAnimation=false

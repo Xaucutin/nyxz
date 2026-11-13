@@ -16,6 +16,7 @@ Singleton {
     readonly property bool barraEmCima: cfg.barraEmCima
     readonly property bool iconesCrescem: cfg.iconesCrescem
     readonly property bool medidor: cfg.medidor
+    readonly property bool areasTrabalho: cfg.areasTrabalho
     readonly property string cantoNotificacoes: cfg.cantoNotificacoes
 
     FileView {
@@ -35,6 +36,7 @@ Singleton {
             property bool barraEmCima: false
             property bool iconesCrescem: false
             property bool medidor: false
+            property bool areasTrabalho: false   // números 1 a 5 na barra (opcional)
             property string cantoNotificacoes: "superior-direito"
             // Lidos só pelo Hyprland (ajustes.lua), guardados aqui para a tela
             property int bordaJanela: 1
