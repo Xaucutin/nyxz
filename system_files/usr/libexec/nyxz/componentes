@@ -229,7 +229,13 @@ def construir(ids, puxar=None):
     ligar_repos(sorted({cat["repositorios"][r] for i in itens for r in i.get("repos", [])}))
     if em_imagem_local():
         sair_da_imagem_local()
-    remover = sorted(p for p in todos - set(pacotes) if rodar(["rpm", "-q", p])[0] == 0)
+    _, st = rodar(["rpm-ostree", "status", "--json", "--booted"])
+    try:
+        pedidos = set(json.loads(st)["deployments"][0].get("requested-packages", []))
+    except (ValueError, KeyError, IndexError):
+        pedidos = set()
+    # Só tira o que foi instalado por aqui (nunca pacotes da imagem base)
+    remover = sorted((todos - set(pacotes)) & pedidos)
     if remover:
         passo("Removendo apps nativos desmarcados")
         rodar(["rpm-ostree", "uninstall", "--idempotent", *remover], mostrar=True)

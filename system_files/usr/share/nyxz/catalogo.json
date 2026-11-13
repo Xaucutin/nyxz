@@ -78,18 +78,6 @@
       "tamanho_mb": 30
     },
     {
-      "id": "dolphin",
-      "categoria": "area",
-      "nome": "Dolphin",
-      "descricao": "Gerenciador de arquivos com abas, etiquetas e prévia (sugerido).",
-      "tipo": "rpm",
-      "pacotes": [
-        "dolphin"
-      ],
-      "padrao": true,
-      "tamanho_mb": 180
-    },
-    {
       "id": "thunar",
       "categoria": "area",
       "nome": "Thunar",

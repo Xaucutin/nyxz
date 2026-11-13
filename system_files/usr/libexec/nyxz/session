@@ -5,6 +5,15 @@
 # O nome do arquivo de sessão muda conforme o pacote do Hyprland (o COPR atual instala
 # só "hyprland-uwsm.desktop"), então o Hyprland é iniciado pelo executável.
 
+# Padrão: KDE Plasma (janelas no estilo Windows, prontas). Quem quiser a sessão antiga
+# do Hyprland escreve "hyprland" em ~/.config/nyxz/sessao.
+if [ "$(cat "$HOME/.config/nyxz/sessao" 2>/dev/null)" != "hyprland" ] && command -v startplasma-wayland >/dev/null 2>&1; then
+  case "$(systemd-detect-virt 2>/dev/null)" in
+    oracle|vmware) export LIBGL_ALWAYS_SOFTWARE=1 ;;
+  esac
+  exec startplasma-wayland
+fi
+
 # Configuração da Nyxz no lugar certo (o Hyprland 0.57 só aceita Lua).
 /usr/libexec/nyxz/hypr-config
 
