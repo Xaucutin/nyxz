@@ -45,7 +45,7 @@ Pagina {
         onPronto: (saida, codigo) => {
             if (p.estado === "procurando")
                 p.mensagem = codigo === 0
-                    ? (saida.includes("No changes") || saida.includes("No update") ? "Você já está na versão mais nova." : "Atualização baixada. Reinicie para aplicar.")
+                    ? (saida.includes("No changes") || saida.includes("No update") || saida.includes("No upgrade") ? "Você já está na versão mais nova." : "Atualização baixada. Reinicie para aplicar.")
                     : "Não foi possível procurar atualizações. Verifique a internet e tente de novo.";
             else if (p.estado === "voltando")
                 p.mensagem = codigo === 0 ? "Pronto: a versão anterior volta no próximo boot. Reinicie para aplicar." : "Não foi possível voltar a versão.";
@@ -113,7 +113,7 @@ Pagina {
             onClicado: {
                 p.estado = "procurando";
                 p.mensagem = "";
-                // Com apps nativos escolhidos, a imagem local é reconstruída sobre a base nova.
+                // Com apps nativos escolhidos, o rpm-ostree baixa só o que mudou e reaplica os apps.
                 acao.rodar(["pkexec", "/usr/libexec/nyxz/atualizar"]);
             }
         }
