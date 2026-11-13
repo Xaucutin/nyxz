@@ -231,7 +231,8 @@ if [ -n "$faltando" ]; then
   echo "$faltando"
   exit 1
 fi
-for bin in startplasma-wayland Hyprland greetd foot /usr/libexec/nyxz/nyxz-scoped; do
+grep -h '^Exec=' /usr/share/wayland-sessions/plasma*.desktop || { echo "ERRO: sessão do Plasma não instalada"; ls /usr/share/wayland-sessions; exit 1; }
+for bin in Hyprland greetd foot /usr/libexec/nyxz/nyxz-scoped; do
   command -v "$bin" >/dev/null 2>&1 || { echo "ERRO: $bin não está no sistema"; exit 1; }
 done
 ls /usr/share/wayland-sessions/*.desktop >/dev/null 2>&1 || { echo "ERRO: nenhuma sessão Wayland instalada"; exit 1; }

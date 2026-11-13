@@ -7,11 +7,13 @@
 
 # Padrão: KDE Plasma (janelas no estilo Windows, prontas). Quem quiser a sessão antiga
 # do Hyprland escreve "hyprland" em ~/.config/nyxz/sessao.
-if [ "$(cat "$HOME/.config/nyxz/sessao" 2>/dev/null)" != "hyprland" ] && command -v startplasma-wayland >/dev/null 2>&1; then
+# O comando vem do próprio arquivo de sessão do Plasma (o nome muda entre versões).
+plasma_cmd=$(sed -n 's/^Exec=//p' /usr/share/wayland-sessions/plasma*.desktop 2>/dev/null | head -n1)
+if [ "$(cat "$HOME/.config/nyxz/sessao" 2>/dev/null)" != "hyprland" ] && [ -n "$plasma_cmd" ]; then
   case "$(systemd-detect-virt 2>/dev/null)" in
     oracle|vmware) export LIBGL_ALWAYS_SOFTWARE=1 ;;
   esac
-  exec startplasma-wayland
+  eval exec $plasma_cmd
 fi
 
 # Configuração da Nyxz no lugar certo (o Hyprland 0.57 só aceita Lua).
